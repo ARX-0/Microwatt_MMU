@@ -4,6 +4,7 @@
 
 ![The FSM of the microwatt MMU](https://github.com/ARX-0/Microwatt_MMU/blob/main/images/FSM%20done.png)
 
+![the address shifiting and the masking of the bits](https://github.com/ARX-0/Microwatt_MMU/blob/main/images/Screenshot%202025-07-30%20113719.png)
 # -----------------------------------------
 
 <b>
