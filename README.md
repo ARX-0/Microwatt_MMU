@@ -1,3 +1,9 @@
+# The FSM of the MMU in the Microwatt
+
+### the numbers represent the code lines and the comments in side the states represent the control signals, the edges of the fsm and the comments give the condition on which the transition happens.
+
+![The FSM of the microwatt MMU](https://github.com/ARX-0/Microwatt_MMU/blob/main/images/FSM%20done.png)
+
 # -----------------------------------------
 
 <b>
