@@ -19,6 +19,18 @@ https://github.com/OpenPOWERFoundation/a2o
 
 # -----------------------------------------
 
+# Pages in the POWER ISA 3.1 
+
+HASH
+- Radix using Partitions (page nuber 1184-1190) 
+- Page table search (1196)
+
+RADIX
+- 6.7.10 Radix Tree Translation (1198) 
+- ......till Radix on Radix (1203)
+  
+
+
 # A2O
 
 ## The Project
