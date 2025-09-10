@@ -36,8 +36,9 @@
 
 `timescale 1 ns / 1 ns
 
-`include "tri_a2o.vh"
+
 `include "mmu_a2o.vh"
+`include "tri_a2o.vh"
 `define            MMQ_INVAL_TTYPE_WIDTH   6
 `define            MMQ_INVAL_STATE_WIDTH   2
 `define            INV_SEQ_WIDTH           6
