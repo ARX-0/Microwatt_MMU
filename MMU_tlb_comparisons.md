@@ -61,66 +61,88 @@ For Context
 
 
 [WE NEED THIS SIMPLIFIED ENOUGH]
-<<Host real address space size is 2m bytes, m≤60;
-see Note 1.
-• Guest real address space size is 2m bytes, m≤60;
-see Notes 1 and 2.
-• Real page size is 212 bytes (4 KB).
-• Effective address space size is 264 bytes.
-• For HPT translation, an effective address is translated to a virtual address via a segment descriptor
-that was either bolted into the Segment Lookaside
-Buffer (SLB) by software or found and installed into
-the SLB via a hardware walk of the Segment Table.
-After that, the virtual address is translated to a host
-real address via a hardware walk of the Page Table.
-– Virtual address space size is 2n bytes,
-65≤n≤78; see Note 3.
-– Segment size is 2s bytes, s=28 or 40.
-– 2
-n-40 ≤ number of virtual segments ≤ 2
-n-28;
-see Note 3.
-– Virtual page size is 2p bytes, where 12≤p,
-and 2p
-is no larger than either the size of the
-biggest segment or the real address space; a
-size of 4 KB, 64 KB, and an implementationdependent number of other sizes are supported; see Note 4. The Page Table specifies
-the virtual page size. The SLB specifies the
-base virtual page size, which is the smallest
-virtual page size that the segment can contain. The base virtual page size is 2b bytes.
-– Segments contain pages of a single size, a
-mixture of 4 KB and 64 KB pages, or a mixture
-of page sizes that include implementationdependent page sizes.
-• For Radix Tree translation, an effective address is
-translated to a (guest or host) real address via a
-hardware walk of the Page Table.
-– Virtual page size is 2p bytes, where 12≤p, and
-2
-p
-is no larger than the size of the real address
-space; a size of 4 KB, 64 KB, 2MB, and an
-implementation-dependent number of other
-sizes are supported; see Note 4. The virtual
-page size is determined by the location of the
-Page Table Entry in the Radix Tree.
-Notes:
-1. The value of m is implementation-dependent (subject to the maximum given above). When used to
-address storage or to represent a guest real address, the high-order 60-m bits of the “60-bit” real
-address must be zeros.
-2. The hypervisor may assign a guest real address
-space size for each partition that uses Radix Tree
-translation. Accesses to guest real storage outside
-this range but still mappable by the second level
-Radix Tree will cause an HISI or HDSI. Accesses
-to storage outside the mappable range will have
-boundedly undefined results.
-3. The value of n is implementation-dependent (subject to the range given above). In references to
-78-bit virtual addresses elsewhere in this Book, the
-high-order 78-n bits of the “78-bit” virtual address
-are assumed to be zeros.
-4. The supported values of p for the larger virtual
-page sizes are implementation-dependent (subject
-to the limitations given above).
+<<
+
+# Address Space and Translation Details
+
+- **Host real address space size**: `2^m` bytes, where `m ≤ 60`  
+  - *See Note 1*  
+
+- **Guest real address space size**: `2^m` bytes, where `m ≤ 60`  
+  - *See Notes 1 and 2*  
+
+- **Real page size**: `2^12` bytes (4 KB)  
+
+- **Effective address space size**: `2^64` bytes  
+
+---
+
+## HPT Translation
+
+- An **effective address** is translated to a **virtual address** via a segment descriptor that was either:  
+  - Bolted into the **Segment Lookaside Buffer (SLB)** by software, or  
+  - Found and installed into the SLB via a hardware walk of the **Segment Table**.  
+
+- After that, the virtual address is translated to a **host real address** via a hardware walk of the **Page Table**.  
+
+- **Virtual address space size**: `2^n` bytes, where `65 ≤ n ≤ 78`  
+  - *See Note 3*  
+
+- **Segment size**: `2^s` bytes, where `s = 28` or `40`  
+
+- **Number of virtual segments**:  
+  - `2^(n-40) ≤ #segments ≤ 2^(n-28)`  
+  - *See Note 3*  
+
+- **Virtual page size**: `2^p` bytes  
+  - `p ≥ 12`  
+  - `2^p` ≤ min( size of biggest segment, real address space )  
+  - Supported sizes: `4 KB`, `64 KB`, plus implementation-dependent sizes  
+  - *See Note 4*  
+
+- **Page Table**: specifies the **virtual page size**  
+- **SLB**: specifies the **base virtual page size** (`2^b` bytes)  
+  - Smallest virtual page size a segment can contain  
+
+- **Segments** may contain:  
+  - Pages of a single size  
+  - A mixture of 4 KB and 64 KB pages  
+  - A mixture of page sizes (including implementation-dependent sizes)  
+
+---
+
+## Radix Tree Translation
+
+- An **effective address** is translated to a **(guest or host) real address** via a hardware walk of the **Page Table**.  
+
+- **Virtual page size**: `2^p` bytes  
+  - `p ≥ 12`  
+  - `2^p ≤` real address space size  
+  - Supported sizes: `4 KB`, `64 KB`, `2 MB`, plus implementation-dependent sizes  
+  - *See Note 4*  
+
+- The virtual page size is determined by the **Page Table Entry (PTE)** location in the **Radix Tree**.  
+
+---
+
+## Notes
+
+> **Note 1**:  
+> The value of `m` is implementation-dependent (subject to `m ≤ 60`).  
+> When used to address storage or to represent a guest real address, the high-order `(60 - m)` bits of the *“60-bit”* real address must be zeros.  
+
+> **Note 2**:  
+> The hypervisor may assign a guest real address space size for each partition that uses Radix Tree translation.  
+> - Accesses to guest real storage **outside this range but still mappable** by the second-level Radix Tree will cause an **HISI** or **HDSI**.  
+> - Accesses to storage **outside the mappable range** will have boundedly undefined results.  
+
+> **Note 3**:  
+> The value of `n` is implementation-dependent (subject to `65 ≤ n ≤ 78`).  
+> In references to *78-bit virtual addresses* elsewhere in this Book, the high-order `(78 - n)` bits of the *“78-bit”* virtual address are assumed to be zeros.  
+
+> **Note 4**:  
+> The supported values of `p` for larger virtual page sizes are implementation-dependent (subject to the above limitations).  
+
 >>
 
 
