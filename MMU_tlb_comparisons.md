@@ -49,6 +49,11 @@ tlbsync (TLB Synchronize X-form
 )
 
 ## Storage Control Overview. 
+
+[for context i felt like i need to include this]
+
+<img width="1287" height="694" alt="image" src="https://github.com/user-attachments/assets/442d383f-a876-4bb5-b6e7-5c780ab56685" />
+
 [WE NEED THIS SIMPLIFIED ENOUGH]
 <<Host real address space size is 2m bytes, m≤60;
 see Note 1.
@@ -111,3 +116,5 @@ are assumed to be zeros.
 page sizes are implementation-dependent (subject
 to the limitations given above).
 >>
+
+
