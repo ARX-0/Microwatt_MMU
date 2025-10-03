@@ -52,7 +52,13 @@ tlbsync (TLB Synchronize X-form
 
 [for context i felt like i need to include this]
 
+For Context
+
 <img width="1287" height="694" alt="image" src="https://github.com/user-attachments/assets/442d383f-a876-4bb5-b6e7-5c780ab56685" />
+
+
+<img width="1312" height="1170" alt="image" src="https://github.com/user-attachments/assets/9990eca1-188e-4403-9719-c4841bf9d62b" />
+
 
 [WE NEED THIS SIMPLIFIED ENOUGH]
 <<Host real address space size is 2m bytes, m≤60;
@@ -116,5 +122,6 @@ are assumed to be zeros.
 page sizes are implementation-dependent (subject
 to the limitations given above).
 >>
+
 
 
