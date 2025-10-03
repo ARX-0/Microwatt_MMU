@@ -3,8 +3,10 @@
 
 Radix Invalidation Control (RIC) 
 
-0 Just invalidate TLB.
-1 Invalidate just Page Walk Cache.
+0 Just invalidate TLB. // the variants of tlbie and tibel where in (IS != 0, RIC = 2) is same as RIC = 0.
+
+1 Invalidate just Page Walk Cache.// this and IS!=0 -> The page walk entries of the specified LIPD or PID are invalidated.
+
 2 Invalidate TLB, Page Walk Cache, and any caching
 of Partition and Process Table Entries.
 3 Invalidate a group of translations (just in the TLB).
@@ -28,3 +30,13 @@ of the context to be invalidated.
 1 Invalidate matching PID.
 2 Invalidate matching LPID.
 3 If MSRHV=1, invalidate all entries, otherwise invalidate matching LPID.
+
+
+tlbiel (Translation Lookaside Buffer Invalidate Entry Local)
+tlbie (TLB invalidate entry)
+
+
+NOTE :- The ability to target an individual Page Walk
+Cache Entry or the set of entries associated with a given
+Page Table Entry (i.e. IS=0 for RIC=1 or RIC=2) is NOT
+supported by the Power ISA.
