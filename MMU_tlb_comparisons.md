@@ -34,7 +34,7 @@ of the context to be invalidated.
 
 tlbiel (Translation Lookaside Buffer Invalidate Entry Local)
 tlbie (TLB invalidate entry)
-
+tlbsync (Ordering fn for TLBIE instrs)
 
 NOTE :- The ability to target an individual Page Walk
 Cache Entry or the set of entries associated with a given
