@@ -1,4 +1,4 @@
-
+# // LOG 1
 # 6.9.3.3 TLB Management Instructions in v3.1C.
 
 Radix Invalidation Control (RIC) 
@@ -143,7 +143,28 @@ For Context
 > **Note 4**:  
 > The supported values of `p` for larger virtual page sizes are implementation-dependent (subject to the above limitations).  
 
->>
+TLBIE,TLBIEL,TLBSYNC TLBALL(2.07)
+
+# // LOG 2
+
+# 6.7.3  TLB Address Translation. (2.07 Public) 
+
+<img width="1118" height="701" alt="image" src="https://github.com/user-attachments/assets/60714762-430a-40d1-aa54-1f39ae8bb754" />
+
+- The Valid bit of the TLB entry is 1.
+- MSR(IS);MSR(DS) = TS bit of the TLB
+- PID (reg contents) = TID (reg contents)
+- EA{n-1 : 0} = EPN {n-1:0} (effective page number of TLB) {n=64-log2(page size in bytes) }
+
+-  One of the following conditions is true.
+- The TLB array supports the IND bit
+(TLBnCFGIND = 1) and the IND bit of the TLB
+entry is equal to 0.
+- The TLB array does not support the IND bit
+(TLBnCFGIND = 0).
+
+
+
 
 
 
