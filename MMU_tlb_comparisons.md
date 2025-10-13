@@ -149,7 +149,12 @@ TLBIE,TLBIEL,TLBSYNC TLBALL(2.07)
 
 # 6.7.3  TLB Address Translation. (2.07 Public) 
 
+## Reffer the page numbers { 1111(1081) to 1116(1086) } To get the original materials.
+
 <img width="1118" height="701" alt="image" src="https://github.com/user-attachments/assets/60714762-430a-40d1-aa54-1f39ae8bb754" />
+
+<img width="1121" height="878" alt="image" src="https://github.com/user-attachments/assets/69e1c881-2efe-4377-9206-9f149b5e4917" />
+
 
 - The Valid bit of the TLB entry is 1.
 - MSR(IS);MSR(DS) = TS bit of the TLB
@@ -162,6 +167,13 @@ TLBIE,TLBIEL,TLBSYNC TLBALL(2.07)
 entry is equal to 0.
 - The TLB array does not support the IND bit
 (TLBnCFGIND = 0).
+
+- LPIDR = TLPID (or) the TLPID = 0
+- MSR(GS) = TGS(TLB entry)
+
+
+
+
 
 
 
