@@ -144,6 +144,7 @@ For Context
 > The supported values of `p` for larger virtual page sizes are implementation-dependent (subject to the above limitations).  
 
 TLBIE,TLBIEL,TLBSYNC TLBALL(2.07)
+SLBIE, SLBIA, SLBMTE, SLBMFEV, SLBMFEE, SLVFREE, 
 
 # // LOG 2
 
@@ -170,6 +171,11 @@ entry is equal to 0.
 
 - LPIDR = TLPID (or) the TLPID = 0
 - MSR(GS) = TGS(TLB entry)
+
+### Bonus (TLB Entry Invalidation)
+
+<img width="592" height="550" alt="image" src="https://github.com/user-attachments/assets/b5253560-8f4c-4ad8-912b-6de05e8b9bba" />
+
 
 
 
