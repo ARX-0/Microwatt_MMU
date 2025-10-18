@@ -156,6 +156,7 @@ SLBIE, SLBIA, SLBMTE, SLBMFEV, SLBMFEE, SLVFREE,
 
 <img width="1121" height="878" alt="image" src="https://github.com/user-attachments/assets/69e1c881-2efe-4377-9206-9f149b5e4917" />
 
+#### The pages for you to KNOW the context in the 2.07 ISA doc (1078-1081)
 
 - The Valid bit of the TLB entry is 1.
 - MSR(IS);MSR(DS) = TS bit of the TLB
