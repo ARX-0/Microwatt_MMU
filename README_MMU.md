@@ -14,7 +14,7 @@ attributes. In MMU Architecture Version 1.0, up to sixteen page sizes (1KB, 4KB,
 
 ## new instructions 
 
-tlbsrx <E.TWC> ? ( MAS1(TS) == TS )
-tlbilx ? ( MAS6(SAS) == TS )
-tlbilx with T = 3  ? (MAS6(SAS) == TS )
-tliibax with EA[61] = 0 ? (MAS6(SAS) == TS
+- tlbsrx <E.TWC> ? ( MAS1(TS) == TS )
+- tlbilx ? ( MAS6(SAS) == TS )
+- tlbilx with T = 3  ? (MAS6(SAS) == TS )
+- tliibax with EA[61] = 0 ? (MAS6(SAS) == TS
