@@ -45,6 +45,7 @@ entry is equal to 0.
 - tliivax (Translation Address Space : with EA[61] = 0 ? (MAS6(SAS) == TS) (Indirect EA[61]=0: ? MAS6(SIND) == IND )
 
 <img width="432" height="161" alt="image" src="https://github.com/user-attachments/assets/ceabbd35-2bad-4b97-9592-9edbdd6f8c30" />
+
 -pg1133
 
 The tlbivax instruction is used to invalidate TLB
@@ -52,6 +53,7 @@ entries. Additional instructions are used to read and
 write, and search TLB entries, and to provide an ordering function for the effects of tlbivax
 
 <img width="419" height="159" alt="image" src="https://github.com/user-attachments/assets/ba0aafb4-0eda-454e-91cf-8dcaa763270f" />
+
 -pg 1134
 
 The tlbilx instruction invalidates TLB entries in the
@@ -60,6 +62,7 @@ which are protected by the IPROT attribute (entryIPROT
 = 1) are not invalidated.
 
 <img width="428" height="160" alt="image" src="https://github.com/user-attachments/assets/d65a3dbe-2a0a-4611-9224-9abefa0b40cd" />
+
 -pg 1136
 
 If any TLB array contains a valid entry matching the
@@ -70,6 +73,7 @@ and EA, the search is considered successful.
 <img width="393" height="159" alt="image" src="https://github.com/user-attachments/assets/72ef6cce-352a-4782-b499-41b882d1c179" />
 
 -pg 1138
+
 Let the effective address (EA) be the sum (RA|0)+
 (RB).
 If any TLB array contains a valid entry matching the
@@ -80,17 +84,20 @@ and EA, the search is considered successful.
 <img width="404" height="143" alt="image" src="https://github.com/user-attachments/assets/55900742-3553-4f41-80d7-46f92bbd6d53" />
 
 -pg 1139
+
 READ TLB entry 
 
 <img width="428" height="137" alt="image" src="https://github.com/user-attachments/assets/c99ebdc1-7d98-48e3-b0d5-ba199e1b4030" />
 
 -pg 1141
+
 WRITE TLB ENTRY
 
 
 <img width="404" height="142" alt="image" src="https://github.com/user-attachments/assets/0344a7be-70b8-492c-ad42-0a1b6e4b800f" />
 
 -pg 1141
+
 The tlbsync instruction provides an ordering function
 for the effects of all tlbivax instructions executed by the
 thread executing the tlbsync instruction, with respect
