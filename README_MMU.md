@@ -39,7 +39,22 @@ entry is equal to 0.
 
 ## new instructions (referencing the figure 22)
 
-- tlbsrx <E.TWC> ? ( MAS1(TS) == TS )
-- tlbilx ? ( MAS6(SAS) == TS )
-- tlbilx with T = 3  ? (MAS6(SAS) == TS )
-- tliibax with EA[61] = 0 ? (MAS6(SAS) == TS
+- tlbsrx (Translation Address Space: <E.TWC> ? ( MAS1(TS) == TS ))
+- tlbsx (Translation Address Space: ? ( MAS6(SAS) == TS )) (Indirect: ? MAS6(SIND) == IND )
+- tlbilx (Translation with Address Space: T = 3  ? (MAS6(SAS) == TS )) (Indirect T=3: ? MAS6(SIND) == IND )
+- tliibax (Translation Address Space : with EA[61] = 0 ? (MAS6(SAS) == TS) (Indirect EA[61]=0: ? MAS6(SIND) == IND )
+
+
+### w.r.t PAGE size
+
+- tlbwe (write data to the TLB)
+- tlbre (read data from the TLB)
+
+- THE TGS (This 1-bit field indicates whether this TLB
+entry is valid for the guest space or for the
+hypervisor space.)
+
+- 0 Hypervisor space
+- 1 Guest space
+
+ 
