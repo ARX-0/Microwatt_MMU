@@ -97,5 +97,20 @@
 - mm_xu_tlb_miss[0:0]
 - mm_iu_ierat_rel_val[0:4]
 - mm_xu_derat_rel_val[0:4]
-- 
+- mm_xu_derat_snoop_attr[0:25]
+- mm_pc_lru_par_err_ored
+- mm_pc_tlb_multihit_err_ored
+- mm_xu_cr0_eq_ored
+- mm_xu_c0_eq_valid_ored
+- mm_xu_eratmiss_done[0:0]
+- mm_xu_esr_epid[0:0]
+- mm_xu_esr_pt[0:0]
+- mm_xu_esr_st[0:0]
+- mm_xu_hv_priv_ored
+- mm_xu_lrat_miss_ored
+- mm_xu_pt_fault_ored
+- mm_xu_tlb_inelig_ored
+- mm_xu_tlb_miss_ored
+  
+
   
