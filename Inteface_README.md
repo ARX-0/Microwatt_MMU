@@ -9,8 +9,8 @@
 
   <img width="918" height="796" alt="image" src="https://github.com/user-attachments/assets/684811ef-ff6b-44ad-987d-664d64f80efd" />
 
-## with c_wrapper (being the top file)  
-## from top to bottom this will be the exact order of ports 
+## Note:- Set the c_wrapper (as the top file)  
+<!--## from top to bottom this will be the exact order of ports 
 
 - abst_scan_out[1:0]
 - ac_an_lpar_id[0:7]
@@ -112,7 +112,7 @@
 - mm_xu_pt_fault_ored
 - mm_xu_tlb_inelig_ored
 - mm_xu_tlb_miss_ored
-
+-->
 
 ## The DERAT Related signals 
 
