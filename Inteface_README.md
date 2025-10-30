@@ -114,6 +114,41 @@
 - mm_xu_tlb_miss_ored
 -->
 
+
+<--!## Input peripherals 
+iu_mm_ierat_epn[51:0]
+an_ac_reld_core_tag[4:0]
+iu_mm_ierat_tid[13:0]
+lq_mm_derat_req_emq[0:3]
+an_ac_reld_data[1:127]
+slowspr_data_in[0:63]
+an_ac_back_inv_addr[22:63]
+iu_mm_ierat_mmucr0[0:17]
+an_ac_back_inv_lpar_id[0:7]
+iu_mm_ierat__mmucr[0:3]
+iu_mm_ierat_state[0:3]
+debug_bus_in[0:31]
+pc_mm_func_sl_thold_3[0:1]
+pc_mm_func_spl_nsl_thold_3
+pc_mm_func_slp_sl_thold[0:1]
+slowspr_addr_in[0:9]
+lq_mm_derat_req_itag[0:6]
+an_ac_reld_qw[58:59]
+coretracew_Ctrls_in[0:3]
+mm_event_bus_in[0:3]
+xu_mm_ex2_eff_addr[0:63]
+xu_mm_derat_epn[0:51]
+xu_mm_ex1_rs_is[0:8]
+xu_ex2_flush[0:0]
+xu_ex5_flush[0:0]
+xu_ex3_flush[0:0]
+xu_mm_derat_lpid[0:7]
+xu_mm_derat_state[0:3]
+xu_mm_derat_tid[0:13]
+xu_mm_derat_ttype[0:1]
+pc_mm_debug_mux1_ctrls[0:10]
+-->
+
 ## The DERAT Related signals 
 
 - mm_xu_derat_snoop_comming  
