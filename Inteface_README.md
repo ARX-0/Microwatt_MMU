@@ -114,8 +114,8 @@
 - mm_xu_tlb_miss_ored
 -->
 
-
-## Input peripherals 
+# (i/p)
+### Input peripherals 
 - iu_mm_ierat_epn[51:0]
 - an_ac_reld_core_tag[4:0]
 - iu_mm_ierat_tid[13:0]
