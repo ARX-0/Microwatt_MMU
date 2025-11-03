@@ -150,6 +150,9 @@
 -->
 -->
 # (i/p)
+
+#### No LRAT instr in the (i/p)
+
 ### the IERAT instructions (instr Eff to Real address translation)
 
 - iu_mm_ierat_epn[51:0]
