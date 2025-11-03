@@ -148,10 +148,9 @@
 - xu_mm_derat_ttype[0:1]
 - pc_mm_debug_mux1_ctrls[0:10]
 -->
--->
 # (i/p)
 
-#### No LRAT instr in the (i/p)
+#### Note:- No LRAT instr in the (i/p)
 
 ### the IERAT instructions (instr Eff to Real address translation)
 
