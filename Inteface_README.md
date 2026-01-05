@@ -152,6 +152,18 @@
 
 #### Note:- No LRAT instr in the (i/p)
 
+the mmq.v (code line 68-71)
+
+   // Instruction Trace (HTM) Control Signals:
+   //  0    - ac_an_coretrace_first_valid
+   //  1    - ac_an_coretrace_valid
+   //  2:3  - ac_an_coretrace_type[0:1]
+   input  [0:3]                          coretrace_ctrls_in,
+   output [0:3]                          coretrace_ctrls_out,
+
+The instr trace signals that can be used when running verification 
+
+
 ### the IERAT instructions (instr Eff to Real address translation)
 
 - iu_mm_ierat_epn[51:0]
