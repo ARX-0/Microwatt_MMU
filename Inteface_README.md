@@ -332,6 +332,40 @@ The instr trace signals that can be used when running verification
 - mm_pc_local_snoop_reject_ored  
 - mm_xu_local_snoop_reject[0:0]
 
+# IERAT (codelines 107-134; 253-260)
+## The IU -> MMU signals 
+
+- iu_mm_ierat_req
+- iu_mm_ierat_epn
+- iu_mm_ierat_tdid
+- iu_mm_ierat_req_nonspec
+- iu_mm_ierat_flush
+- iu_mm_ierat_snoop_ack
+- iu_mm_ierat_mmucr0
+- iu_mm_ierat_mmucr0_we
+- iu_mm_ierat_mmucr1
+- iu_mm_ierat_mmucr1_we
+
+## The MMU -> IU signals 
+
+- mm_iu_ierat_rel_val
+- mm_iu_ierat_rel_data
+- mm_iu_ierat_snoop_comming
+- mm_iu_ierat_snoop_val
+- mm_iu_ierat_snoop_attr
+- mm_iu_ierat_snoop_vpn
+- mm_iu_t0_ierat_pid
+- mm_iu_t0_ierat_mmucr0
+- mm_iu_t1_ierat_pid
+- mm_iu_t1_ierat_mmucr0
+- mm_iu_ierat_mmucr1
+- mm_iu_tlbwe_binv
+- mm_iu_hold_req
+- mm_iu_hold_done
+- mm_iu_flush_req
+- mm_iu_bus_snoop_hold_req
+- mm_iu_bus_snoop_hold_done
+- mm_iu_tlbi_complete
 
   
 
