@@ -367,7 +367,57 @@ The instr trace signals that can be used when running verification
 - mm_iu_bus_snoop_hold_done
 - mm_iu_tlbi_complete
 
-  
+# D-ERAT (code lines 162-166 and 136-154)
 
+## (Data ERAT) (XU/LQ -> MMU )
+- xu_mm_derat_req
+- xu_mm_derat_epn
+- xu_mm_derat_thdid
+- xu_mm_derat_ttype
+- xu_mm_derat_state
+- xu_mm_derat_lpid
+- xu_mm_derat_tid
+- lq_mm_derat_req_nonspec
+- lq_mm_derat_req_itag
+- lq_mm_derat_req_emq
+- xu_mm_derat_snoop_ack
+- xu_mm_derat_mmucr0
+- xu_mm_derat_mmucr0_we
+- xu_mm_derat_mmucr1
+- xu_mm_derat_mmucr1_we
+
+## D-ERAT Responses (MMU -> XU) 
+
+- mm_xu_derat_rel_val
+- mm_xu_derat_rel_data
+- mm_xu_derat_rel_itag
+- mm_xu_derat_rel_emq
+- mm_xu_derat_snoop_coming
+- mm_xu_derat_snoop_val
+- mm_xu_derat_snoop_attr
+- mm_xu_derat_snoop_vpn
+- mm_xu_t0_derat_pid
+- mm_xu_t0_derat_mmucr0
+- mm_xu_derat_mmucr1
+
+# Pipeline and Instr decode  
+
+## (All of these are inputs)
+
+- xu_mm_rf1_val
+- xu_mm_rf1_is_tlbre
+- xu_mm_rf1_is_tlbwe
+- xu_mm_rf1_is_tlbsx
+- xu_mm_rf1_is_tlbsxr
+- xu_mm_rf1_is_tlbsrx
+- xu_mm_rf1_is_tlbivax
+- xu_mm_rf1_is_tlbilx
+- xu_mm_rf1_is_erativax
+- xu_mm_rf1_is_eratilx
+- xu_mm_ex1_is_isync
+- xu_mm_ex1_is_csync
+- xu_mm_rf1_t
+- xu_mm_ex1_rs_is
+- xu_mm_ex2_eff_addr
 
   
