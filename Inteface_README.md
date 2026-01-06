@@ -420,4 +420,34 @@ The instr trace signals that can be used when running verification
 - xu_mm_ex1_rs_is
 - xu_mm_ex2_eff_addr
 
-  
+# MSR/priv/context signals 
+
+## Code lines (183-193)
+
+- xu_mm_msr_gs
+- xu_mm_msr_pr
+- xu_mm_msr_is
+- xu_mm_msr_ds
+- xu_mm_msr_cm
+- xu_mm_spr_epcr_dmiuh
+- xu_mm_spr_epcr_dgtmi
+- xu_mm_hid_mmu_mode
+- xu_mm_xucr4_mmu_mchk
+
+# Flush hold quiesce control
+
+## Code lines (192 - 201)
+
+- xu_rf1_flush
+- xu_ex1_flush
+- xu_ex2_flush
+- xu_ex3_flush
+- xu_ex4_flush
+- xu_ex5_flush
+- xu_mm_ex4_flush
+- xu_mm_ex5_flush
+- iu_mm_hold_ack
+- iu_mm_bus_snoop_hold_ack
+- iu_mm_lmq_empty
+- xu_mm_lmq_stq_empty
+
