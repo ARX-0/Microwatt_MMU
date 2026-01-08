@@ -451,3 +451,39 @@ The instr trace signals that can be used when running verification
 - iu_mm_lmq_empty
 - xu_mm_lmq_stq_empty
 
+## Clock and Scan Codelines (306-323)
+
+- nclk
+- gptr_scan_in
+- time_scan_in
+- repr_scan_in
+- abst_scan_in
+- func_scan_in
+- bcfg_scan_in
+- ccfg_scan_in
+- dcfg_scan_in
+
+## Test and Power Configuration (codeline 45-48 and )
+
+- tc_ac_ccflush_dc
+- tc_ac_scan_dis_dc_b
+- tc_ac_scan_diag_dc
+- tc_ac_lbist_en_dc
+- pc_mm_*_thold_*
+- pc_mm_sg_3
+- pc_mm_fce_3
+- ac_an_power_managed_imm
+- an_ac_lbist_ary_wrt_thru_dc
+
+## Debug and trace signals (codeline 65-81)
+
+debug_bus_in
+
+- coretrace_ctrls_in
+- pc_mm_debug_mux1_ctrls
+- pc_mm_trace_bus_enable
+- pc_mm_event_count_mode
+- rp_mm_event_bus_enable_q
+- mm_event_bus_in
+
+
