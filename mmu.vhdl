@@ -46,31 +46,79 @@ architecture behave of mmu is
         iside     : std_ulogic;
         store     : std_ulogic;
         priv      : std_ulogic;
-        addr      : std_ulogic_vector(63 downto 0);
+        addr      : std_ulogic_vector(63 downto 0);   -- useful address
         inval_all : std_ulogic;
         -- config SPRs
-        ptcr      : std_ulogic_vector(63 downto 0);
-        pid       : std_ulogic_vector(31 downto 0);
+        ptcr      : std_ulogic_vector(63 downto 0); -- useful 
+        pid       : std_ulogic_vector(31 downto 0); -- useful 
         -- internal state
-        state     : state_t;
-        done      : std_ulogic;
+        state     : state_t;   -- useful STATE
+        done      : std_ulogic; -- useful flow markers
         err       : std_ulogic;
         prtbl     : std_ulogic_vector(63 downto 0);
         ptb_valid : std_ulogic;
         pgtbl0    : std_ulogic_vector(63 downto 0);
-        pt0_valid : std_ulogic;
+        pt0_valid : std_ulogic; -- useful flow markers
         pgtbl3    : std_ulogic_vector(63 downto 0);
-        pt3_valid : std_ulogic;
+        pt3_valid : std_ulogic; -- useful flow markers
         shift     : unsigned(5 downto 0);
         mask_size : unsigned(4 downto 0);
         pgbase    : std_ulogic_vector(55 downto 0);
-        pde       : std_ulogic_vector(63 downto 0);
-        invalid   : std_ulogic;
-        badtree   : std_ulogic;
-        segerror  : std_ulogic;
-        perm_err  : std_ulogic;
-        rc_error  : std_ulogic;
+        pde       : std_ulogic_vector(63 downto 0);   -- useful 
+        invalid   : std_ulogic;   -- useful ERRORS
+        badtree   : std_ulogic;   -- useful ERRORS
+        segerror  : std_ulogic;   -- useful ERRORS
+        perm_err  : std_ulogic;   -- useful ERRORS
+        rc_error  : std_ulogic;   -- useful ERRORS
     end record;
+    ----------------------events in the MMU-------------------------------
+    
+    type mmu_event is (
+    EVENT_NONE,
+    EVENT_WALK_START,
+    EVENT_TLBIE,
+    EVENT_PART_DONE,
+    EVENT_PROC_READ,
+    EVENT_SEGFAULT,
+    EVENT_RADIX_LOOKUP,
+    EVENT_PTE_READ,
+    EVENT_TLB_LOAD,
+    EVENT_FINISH,
+    EVENT_ERROR
+   );
+    ----------------------events in the MMU-------------------------------
+-- TRACE ARRAY LOGIC --
+    type TRACE_ARRAY_ENTRIES is record  --LOGIC FOR THE TRACE ARRAY MAKING 
+    event     :   mmu_event;
+    state : state_t;
+    addr      : std_ulogic_vector(63 downto 0);   -- useful address
+    pid       : std_ulogic_vector(31 downto 0);
+    ptcr:std_ulogic_vector(63 downto 0);
+    pde: std_ulogic_vector(63 downto 0);
+    shift : unsigned(5 downto 0);
+    mask_size : unsigned(4 downto 0);
+    priv: std_ulogic;
+    done: std_ulogic;
+    invalid: std_ulogic;
+    badtree: std_ulogic;
+    segerror: std_ulogic;
+    perm_err: std_ulogic;
+    rc_error: std_ulogic;
+    end record;
+
+-- TRACE ARRAY LOGIC --
+
+-- Inferring the BRAM Logic --
+constant TRACE_DEPTH : integer := 1024; 
+-- we need to take care of the trace width [1024][72] 64 is the upper limit for SPR reasons
+type trace_mem_t is array (0 to TRACE_DEPTH-1) of TRACE_ARRAY_ENTRIES;
+
+signal trace_mem : trace_mem_t;
+signal trace_wr_ptr : unsigned(9 downto 0) := (others => '0');
+-- Inferring the BRAM Logic --
+
+signal prev_state : state_t; --prev state latch 
+
 
     signal r, rin : reg_stage_t;
 
@@ -84,9 +132,16 @@ begin
     l_out.sprval <= r.ptcr when l_in.sprnf = '1' else x"00000000" & r.pid;
 
     mmu_0: process(clk)
+    
+    variable event : mmu_event;
     begin
-        if rising_edge(clk) then
-            if rst = '1' then
+    
+    -- state latch --
+ if rising_edge(clk) then
+
+        
+if rst = '1' then
+
                 r.state <= IDLE;
                 r.valid <= '0';
                 r.ptb_valid <= '0';
@@ -94,7 +149,89 @@ begin
                 r.pt3_valid <= '0';
                 r.ptcr <= (others => '0');
                 r.pid <= (others => '0');
-            else
+                
+                --trace reset 
+                    trace_wr_ptr <= (others => '0');
+                    prev_state <= IDLE;
+                   
+else
+-- capture prev states 
+    prev_state <= r.state; -- capture of the prev cycle
+    
+            --trace array write and the trace array FSM LOGIC--
+                
+    -- EVENT DETECTION --
+         -- if multiple condns become true in a single cycle the last one is logged 
+ event := EVENT_NONE;
+    if prev_state = IDLE and r.state = PART_TBL_READ then
+    event := EVENT_WALK_START;
+    end if;
+
+    if r.state = DO_TLBIE then
+    event := EVENT_TLBIE;
+    end if;
+
+    if r.state = PART_TBL_DONE then
+    event := EVENT_PART_DONE;
+    end if;
+
+    if r.state = PROC_TBL_READ then
+    event := EVENT_PROC_READ;
+    end if;
+
+    if r.state = SEGMENT_CHECK and r.segerror = '1' then
+    event := EVENT_SEGFAULT;
+    end if;
+
+    if r.state = RADIX_LOOKUP then 
+    event := EVENT_RADIX_LOOKUP;
+    end if;
+
+    if prev_state = RADIX_READ_WAIT and r.state /= RADIX_READ_WAIT then
+    event := EVENT_PTE_READ;
+    end if;
+
+    if r.state = RADIX_LOAD_TLB then
+    event := EVENT_TLB_LOAD;
+    end if;
+
+    if r.state = RADIX_FINISH then
+    event := EVENT_FINISH;
+    end if;
+
+        if r.invalid = '1' or
+           r.badtree = '1' or
+           r.segerror = '1' or
+           r.perm_err = '1' or
+           r.rc_error = '1' then
+            event := EVENT_ERROR;
+         end if;
+
+  -- EVENT DETECTION --
+
+  -- EVENT WRITE TO BRAM -- 
+  if event /= EVENT_NONE then
+
+    trace_mem(to_integer(trace_wr_ptr)).event     <= event;
+    trace_mem(to_integer(trace_wr_ptr)).state     <= r.state;
+    trace_mem(to_integer(trace_wr_ptr)).addr      <= r.addr;
+    trace_mem(to_integer(trace_wr_ptr)).pid       <= r.pid;
+    trace_mem(to_integer(trace_wr_ptr)).ptcr      <= r.ptcr;
+    trace_mem(to_integer(trace_wr_ptr)).pde       <= r.pde;
+    trace_mem(to_integer(trace_wr_ptr)).shift     <= r.shift;
+    trace_mem(to_integer(trace_wr_ptr)).mask_size <= r.mask_size;
+    trace_mem(to_integer(trace_wr_ptr)).priv      <= r.priv;
+    trace_mem(to_integer(trace_wr_ptr)).done      <= r.done;
+    trace_mem(to_integer(trace_wr_ptr)).invalid   <= r.invalid;
+    trace_mem(to_integer(trace_wr_ptr)).badtree   <= r.badtree;
+    trace_mem(to_integer(trace_wr_ptr)).segerror  <= r.segerror;
+    trace_mem(to_integer(trace_wr_ptr)).perm_err  <= r.perm_err;
+    trace_mem(to_integer(trace_wr_ptr)).rc_error  <= r.rc_error;
+
+    trace_wr_ptr <= trace_wr_ptr + 1;
+
+end if;
+          --trace array write and the trace array FSM LOGIC--
                 if rin.valid = '1' then
                     report "MMU got tlb miss for " & to_hstring(rin.addr);
                 end if;
@@ -114,8 +251,9 @@ begin
                         " addrsh=" & to_hstring(addrsh) & " mask=" & to_hstring(mask);
                 end if;
                 r <= rin;
-            end if;
-        end if;
+                
+                end if; -- rst
+            end if; -- rising edge
     end process;
 
     -- Shift address bits 61--12 right by 0--47 bits and
