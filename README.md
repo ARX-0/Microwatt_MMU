@@ -1,67 +1,104 @@
-# The FSM of the MMU in the Microwatt
+# Microwatt_MMU — porting the Microwatt radix page-table walk into the A2O MMU
 
-### the numbers represent the code lines and the comments in side the states represent the control signals, the edges of the fsm and the comments give the condition on which the transition happens.
+This repo holds both cores side by side so the MMU work can reference them together.
+The goal: give the **A2O** core a Power ISA 3.1C **radix multi-level page-table walk**,
+taken from **Microwatt**'s `mmu.vhdl`.
 
-![The FSM of the microwatt MMU](https://github.com/ARX-0/Microwatt_MMU/blob/main/images/FSM%20done.png)
+See **[PLAN.md](PLAN.md)** for the structural comparison of the two MMUs, the full SPR
+present/absent/port analysis, and the `mmq_rtw.v` design.
 
-![the address shifiting and the masking of the bits](https://github.com/ARX-0/Microwatt_MMU/blob/main/images/Screenshot%202025-07-30%20113719.png)
-# -----------------------------------------
+## Repo structure
 
-<b>
-This repo has been archived and relocated.
-<br><br>
-The new home is:
-https://git.openpower.foundation/cores/a2o
+```
+Microwatt_MMU/
+├── PLAN.md                     the port plan: MMU comparison, SPR map, mmq_rtw.v design
+├── a2o/                        IBM A2O core (Verilog) — the port target
+│   ├── rel/
+│   │   ├── src/verilog/work/       the core; MMU is mmq*.v, header mmu_a2o.vh
+│   │   ├── src/verilog/trilib/     tri_* latch/primitive library
+│   │   ├── src/vhdl/               AXI wrappers, debug, scom
+│   │   ├── build/                  Vivado IP + block-design TCL
+│   │   ├── fpga/                   FPGA build scripts
+│   │   └── doc/                    A2O_UM.pdf, PowerISA_V2.07B.pdf
+│   ├── CONTRIBUTING.md
+│   └── LICENSE
+├── microwatt/                  Microwatt core (VHDL) — the reference implementation
+│   ├── mmu.vhdl                    the radix walker being ported
+│   ├── common.vhdl                 SPR numbers, MMU/loadstore record types
+│   ├── dcache.vhdl fetch1.vhdl     dTLB / iTLB + ERAT
+│   ├── loadstore1.vhdl             MMU request path, DSISR/DAR
+│   ├── ... 75 core .vhdl files, Makefile, microwatt.core
+│   └── reference/mmu_test/         radix tree setup reference (mmu.c)
+└── docs/                       analysis notes and diagrams
+    ├── README_MMU.md               Book-E (ISA 2.07) TLB semantics study
+    ├── Inteface_README.md          full mmq.v port list, grouped by interface
+    ├── MMU_tlb_comparisons.md      ISA 2.07 vs 3.1C tlbie/RIC/PRS gap analysis
+    ├── MMU_a2o_peripherals.drawio
+    ├── MMU_vhdl_code_explaination.drawio
+    ├── mmu.vhdl.snapshot           stale older copy of Microwatt mmu.vhdl, kept for diffing
+    ├── images/                     FSM and address-shifter diagrams
+    └── doc_copare/                 Power ISA and A2O reference PDFs
+```
 
-It is mirrored at:
-https://github.com/OpenPOWERFoundation/a2o
-</b>
+### Provenance
 
-# -----------------------------------------
+- **`a2o/`** — the OpenPOWER A2O core release. Upstream:
+  <https://git.openpower.foundation/cores/a2o>
+  (mirror: <https://github.com/OpenPOWERFoundation/a2o>).
+  Compliant to Power ISA 2.07, Book III-E. Its MMU is a Book-E embedded MMU with a
+  single-level E.PT hardware tablewalker — no radix.
+- **`microwatt/`** — copy of <https://github.com/antonblanchard/microwatt> at commit
+  `5e4c61f`, `.git` excluded, **pruned to CPU sources only**. Removed: `tests/`,
+  `litedram/`, `liteeth/`, `litesdcard/`, `openocd/`, `micropython/`, `fpga/`,
+  `hello_world/`, `rust_lib_demo/`, `uart16550/`, `scripts/`, `constraints/`, `media/`,
+  `verilator/`, `esim/`, `sim-unisim/`. Implements the full ISA 3.0B/3.1 radix tree.
+  This copy carries a local fork feature — an MMU walk-trace array on SPR 704/705 — which
+  is **not** part of the A2O port.
 
-# Pages in the POWER ISA 3.1 
+## The MMU FSM in Microwatt
 
-HASH
-- Radix using Partitions (page nuber 1184-1190) 
-- Page table search (1196)
+The numbers are code line references; the comments inside each state are the control
+signals, and the edge labels give the transition conditions.
 
-RADIX
-- 6.7.10 Radix Tree Translation (1198) 
-- ......till Radix on Radix (1203)
-  
+![The FSM of the Microwatt MMU](docs/images/FSM%20done.png)
 
+![Address shifting and bit masking](docs/images/Screenshot%202025-07-30%20113719.png)
 
-# A2O
+## Power ISA 3.1 reading references
 
-## The Project
-This is the release of the A2O POWER processor core RTL and associated FPGA implementation (using ADM-PCIE-9V3 FPGA).
+Radix
+- 6.7.10 Radix Tree Translation — p. 1198, through Radix on Radix — p. 1203
 
-See [Project Info](rel/readme.md) for details.
+Hash
+- Radix using Partitions — pp. 1184-1190
+- Page table search — p. 1196
 
-## The Core
-The [A2O core](rel/doc/A2O_UM.pdf) was created to optimize single-thread performance, and targeted 3+ GHz in 45nm technology.
+## A2O core notes (from the upstream release)
 
-It is a 27 FO4 implementation, with an out-of-order pipeline supporting 1 or 2 threads.  It fully supports Power ISA 2.07 using Book III-E.
-The core was also designed to support pluggable implementations of MMU and AXU logic macros.
-This includes elimination of the MMU and using ERAT-only mode for translation/protection.
+A2O optimizes single-thread performance, targeting 3+ GHz in 45 nm. It is a 27 FO4
+implementation with an out-of-order pipeline supporting 1 or 2 threads, fully supporting
+Power ISA 2.07 using Book III-E. It supports pluggable MMU and AXU logic macros, including
+eliminating the MMU entirely and using ERAT-only mode for translation/protection.
 
-## The History
+See [a2o/rel/readme.md](a2o/rel/readme.md) for build details and
+[a2o/rel/doc/A2O_UM.pdf](a2o/rel/doc/A2O_UM.pdf) for the user manual.
 
-The A2O design was a follow-on to A2I, written in Verilog, and supported a lower thread count than A2I, but higher performance per thread, using out-of-order execution
-(register renaming, reservation stations, completion buffer) and a store queue. 
+### Compliancy — why this project exists
 
-The A2L2 external interface is largely the same for the two cores.
+> The A2O core is compliant to Power ISA 2.07 and will need updates to be compliant with
+> either version 3.0c or 3.1. Changes will include:
+> * **radix translation**
+> * op updates, to eliminate noncompliant ones and add missing ones required for a given
+>   compliancy level
+> * various 'mode' and other changes to meet the open specification targeted compliancy
+>   level (III-E needs to be changed to III)
 
-## FPGA Implementation Notes
+This repo addresses the first item.
 
-1. There are lots of knobs available for tweaking generation parameters.  Very little experimentation was done to test whether they work, or the effects on area, etc.
-2. Only single-thread generation has been done so far.  The FPGA in use has very high utilization with one thread.
-3. A2I used clk_1x and clk_2x (for some of the special arrays), but A2O also uses clk_4x.  This (and possibly along with the area congestion) led to changing the clk_1x to 50MHz to lessen timing pressure
-(both setup and hold misses).
+### Technology scaling
 
-### Technology Scaling
-
-A comparison of the design in original technology and scaled to 7nm (SMT2, fixed-point, no MMU):
+A comparison of the design in original technology and scaled to 7 nm (SMT2, fixed-point,
+no MMU):
 
 |      |Freq     |Pwr    |Freq Sort|Pwr Sort|Area     |Vdd    |
 |-----:|---------|-------|---------|--------|---------|-------|
@@ -72,32 +109,15 @@ A comparison of the design in original technology and scaled to 7nm (SMT2, fixed
 | 7nm  |3.07 GHz |0.32 W |3.60 GHz |0.38 W  |0.31 mm<sup>2</sup> |0.8  V |
 | 7nm  |2.40 GHz |0.20 W |3.00 GHz |0.25 W  |0.31 mm<sup>2</sup> |0.7  V |
 
-These estimates are based on a semicustom design in representative foundry processes (IBM 45nm/Samsung 7nm).
+Estimates based on a semicustom design in representative foundry processes
+(IBM 45 nm / Samsung 7 nm).
 
-### Compliancy
+### Errata (upstream, unresolved)
 
-The A2O core is compliant to Power ISA 2.07 and will need updates to be compliant with either version 3.0c or 3.1.
-Power ISA 3.0c and 3.1 are the two Power ISA versions contributed to OpenPOWER Foundation by IBM.  Changes will include:
-
-* radix translation
-* op updates, to eliminate noncompliant ones and add missing ones required for a given compliancy level
-* various 'mode' and other changes to meet the open specification targeted compliancy level (III-E needs to be changed to III)
-
-## Miscellaneous
-
-1. A2O was not released as a product; the documentation was derived from A2I but is *much* less complete than the A2I version.
-The documentation has been edited and updated where possible, but undoubtedly, there
-remain errors vis a vis the RTL (especially likely in implementation-specific SPRs).
-
-      Please use 'issues' to report errors. 
-
-## Errata
-
-1. There is a problem that is being circumvented by setting LSUCR0.DFWD=1, AND limiting the store queue size (currently at 4).  While it appears 
-to be directly related to forwarding (L1 DC hit returns 0's instead of data), the store queue size also had to be limited.
-
-      Not debugged at this time; could be related to:
-      1. bad generation parm
-      2. bad edit for source updates related to compiling for Vivado
-      3. ???
-      
+1. A problem circumvented by setting `LSUCR0.DFWD=1` **and** limiting the store queue size
+   (currently 4). It appears directly related to forwarding (L1 DC hit returns 0's instead
+   of data), but the store queue size also had to be limited. Not debugged; could be a bad
+   generation parm, a bad edit for Vivado compilation, or something else.
+2. A2O was not released as a product. Its documentation was derived from A2I and is much
+   less complete; errors vis-a-vis the RTL remain likely, especially in
+   implementation-specific SPRs.

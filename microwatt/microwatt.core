@@ -1,0 +1,615 @@
+CAPI=2:
+
+name : ::microwatt:0
+
+filesets:
+  core:
+    files:
+      - decode_types.vhdl
+      - wishbone_types.vhdl
+      - common.vhdl
+      - fetch1.vhdl
+      - predecode.vhdl
+      - decode1.vhdl
+      - helpers.vhdl
+      - decode2.vhdl
+      - register_file.vhdl
+      - cr_file.vhdl
+      - crhelpers.vhdl
+      - ppc_fx_insns.vhdl
+      - sim_console.vhdl
+      - logical.vhdl
+      - countbits.vhdl
+      - bitsort.vhdl
+      - control.vhdl
+      - execute1.vhdl
+      - fpu.vhdl
+      - loadstore1.vhdl
+      - mmu.vhdl
+      - dcache.vhdl
+      - divider.vhdl
+      - rotator.vhdl
+      - pmu.vhdl
+      - writeback.vhdl
+      - insn_helpers.vhdl
+      - core.vhdl
+      - icache.vhdl
+      - plrufn.vhdl
+      - cache_ram.vhdl
+      - core_debug.vhdl
+      - utils.vhdl
+    file_type : vhdlSource-2008
+
+  soc:
+    files:
+      - wishbone_arbiter.vhdl
+      - wishbone_debug_master.vhdl
+      - wishbone_bram_wrapper.vhdl
+      - soc.vhdl
+      - xics.vhdl
+      - gpio.vhdl
+      - syscon.vhdl
+      - sync_fifo.vhdl
+      - spi_rxtx.vhdl
+      - spi_flash_ctrl.vhdl
+      - git.vhdl
+    file_type : vhdlSource-2008
+
+  fpga:
+    files:
+      - fpga/main_bram.vhdl
+      - fpga/soc_reset.vhdl
+      - fpga/pp_fifo.vhd
+      - fpga/pp_soc_uart.vhd
+      - fpga/pp_utilities.vhd
+      - fpga/firmware.hex : {copyto : firmware.hex, file_type : user}
+      - nonrandom.vhdl
+    file_type : vhdlSource-2008
+
+  xilinx_specific:
+    files:
+      - xilinx-mult.vhdl : {file_type : vhdlSource-2008}
+      - xilinx-mult-32s.vhdl : {file_type : vhdlSource-2008}
+
+  debug_xilinx:
+    files:
+      - dmi_dtm_xilinx.vhdl : {file_type : vhdlSource-2008}
+
+  debug_dummy:
+    files:
+      - dmi_dtm_dummy.vhdl : {file_type : vhdlSource-2008}
+
+  nexys_a7:
+    files:
+      - fpga/nexys_a7.xdc : {file_type : xdc}
+      - fpga/clk_gen_plle2.vhd : {file_type : vhdlSource-2008}
+      - fpga/top-generic.vhdl : {file_type : vhdlSource-2008}
+
+  nexys_video:
+    files:
+      - fpga/nexys-video.xdc : {file_type : xdc}
+      - fpga/clk_gen_plle2.vhd : {file_type : vhdlSource-2008}
+      - fpga/top-nexys-video.vhdl : {file_type : vhdlSource-2008}
+
+  acorn_cle_215:
+    files:
+      - fpga/acorn-cle-215.xdc : {file_type : xdc}
+      - fpga/clk_gen_plle2.vhd : {file_type : vhdlSource-2008}
+      - fpga/top-acorn-cle-215.vhdl : {file_type : vhdlSource-2008}
+
+  genesys2:
+    files:
+      - fpga/genesys2.xdc : {file_type : xdc}
+      - fpga/clk_gen_plle2.vhd : {file_type : vhdlSource-2008}
+      - fpga/top-genesys2.vhdl : {file_type : vhdlSource-2008}
+
+  arty_a7:
+    files:
+      - fpga/arty_a7.xdc : {file_type : xdc}
+      - fpga/clk_gen_plle2.vhd : {file_type : vhdlSource-2008}
+      - fpga/top-arty.vhdl : {file_type : vhdlSource-2008}
+
+  antmicro-artix-dc-scm:
+    files:
+      - fpga/antmicro_artix_dc_scm.xdc: {file_type : xdc}
+      - fpga/clk_gen_plle2.vhd : {file_type : vhdlSource-2008}
+      - fpga/top-antmicro-artix-dc-scm.vhdl : {file_type : vhdlSource-2008}
+
+  wukong-v2:
+    files:
+      - fpga/wukong-v2.xdc : {file_type : xdc}
+      - fpga/clk_gen_plle2.vhd : {file_type : vhdlSource-2008}
+      - fpga/top-wukong-v2.vhdl : {file_type : vhdlSource-2008}
+
+  cmod_a7-35:
+    files:
+      - fpga/cmod_a7-35.xdc : {file_type : xdc}
+      - fpga/clk_gen_mcmm.vhd : {file_type : vhdlSource-2008}
+      - fpga/top-generic.vhdl : {file_type : vhdlSource-2008}
+
+  litedram:
+      depend : [":microwatt:litedram"]
+
+  liteeth:
+      depend : [":microwatt:liteeth"]
+
+  litesdcard:
+      depend : [":microwatt:litesdcard"]
+
+  uart16550:
+      depend : [":microwatt:uart16550"]
+
+  lcdts:
+    files:
+      - fpga/arty-lcd-ts.vhdl : {file_type : vhdlSource-2008}
+
+targets:
+  nexys_a7:
+    default_tool: vivado
+    filesets: [core, nexys_a7, soc, fpga, debug_xilinx, uart16550, xilinx_specific]
+    generate: [git_hash]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - clk_input
+      - clk_frequency
+      - disable_flatten_core
+      - log_length=2048
+      - uart_is_16550
+      - has_fpu
+      - has_btc
+    tools:
+      vivado: {part : xc7a100tcsg324-1}
+    toplevel : toplevel
+
+  acorn-cle-215-nodram:
+    default_tool: vivado
+    filesets: [core, acorn_cle_215, soc, fpga, debug_xilinx, uart16550, xilinx_specific]
+    generate: [git_hash]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - clk_input
+      - clk_frequency
+      - disable_flatten_core
+      - spi_flash_offset=10485760
+      - log_length=2048
+      - uart_is_16550
+    tools:
+      vivado: {part : xc7a200tsbg484-2}
+    toplevel : toplevel
+
+  genesys2-nodram:
+    default_tool: vivado
+    filesets: [core, genesys2, soc, fpga, debug_xilinx, uart16550, xilinx_specific]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - clk_frequency
+      - use_litedram=false
+      - no_bram=false
+      - disable_flatten_core
+      - spi_flash_offset=12582912
+      - log_length=2048
+      - uart_is_16550
+    generate: [git_hash]
+    tools:
+      vivado: {part : xc7k325tffg900-2}
+    toplevel : toplevel
+
+  acorn-cle-215:
+    default_tool: vivado
+    filesets: [core, acorn_cle_215, soc, fpga, debug_xilinx, litedram, uart16550, xilinx_specific]
+    parameters :
+      - cpus
+      - memory_size
+      - ram_init_file
+      - use_litedram=true
+      - disable_flatten_core
+      - no_bram
+      - spi_flash_offset=10485760
+      - log_length=2048
+      - uart_is_16550
+      - has_fpu
+      - has_btc
+    generate: [litedram_acorn_cle_215, git_hash]
+    tools:
+      vivado: {part : xc7a200tsbg484-2}
+    toplevel : toplevel
+
+  genesys2:
+    default_tool: vivado
+    filesets: [core, genesys2, soc, fpga, debug_xilinx, litedram, liteeth, uart16550, xilinx_specific]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - use_litedram=true
+      - use_liteeth=true
+      - disable_flatten_core
+      - no_bram
+      - spi_flash_offset=12582912
+      - log_length=2048
+      - uart_is_16550
+    generate: [litedram_genesys2, liteeth_genesys2, git_hash]
+    tools:
+      vivado: {part : xc7k325tffg900-2}
+    toplevel : toplevel
+
+  nexys_video-nodram:
+    default_tool: vivado
+    filesets: [core, nexys_video, soc, fpga, debug_xilinx, uart16550, xilinx_specific]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - clk_input
+      - clk_frequency
+      - disable_flatten_core
+      - spi_flash_offset=10485760
+      - log_length=2048
+      - uart_is_16550
+      - has_fpu
+      - has_btc
+    generate: [git_hash]
+    tools:
+      vivado: {part : xc7a200tsbg484-1}
+    toplevel : toplevel
+
+  nexys_video:
+    default_tool: vivado
+    filesets: [core, nexys_video, soc, fpga, debug_xilinx, litedram, liteeth, uart16550, xilinx_specific, litesdcard]
+    parameters:
+      - memory_size
+      - ram_init_file
+      - use_litedram=true
+      - use_liteeth=true
+      - use_litesdcard=true
+      - disable_flatten_core
+      - no_bram
+      - spi_flash_offset=10485760
+      - log_length=2048
+      - uart_is_16550
+      - has_fpu
+      - has_btc
+    generate: [litedram_nexys_video, liteeth_nexys_video, litesdcard_nexys_video, git_hash]
+    tools:
+      vivado: {part : xc7a200tsbg484-1}
+    toplevel : toplevel
+
+  arty_a7-35-nodram:
+    default_tool: vivado
+    filesets: [core, arty_a7, soc, fpga, debug_xilinx, uart16550, xilinx_specific, litesdcard]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - clk_input
+      - clk_frequency
+      - disable_flatten_core
+      - spi_flash_offset=3145728
+      - log_length=512
+      - uart_is_16550
+      - has_uart1
+      - has_fpu=false
+      - has_btc=false
+      - use_litesdcard
+    generate: [git_hash]
+    tools:
+      vivado: {part : xc7a35ticsg324-1L}
+    toplevel : toplevel
+
+  arty_a7-35:
+    default_tool: vivado
+    filesets: [core, arty_a7, soc, fpga, debug_xilinx, litedram, liteeth, uart16550, xilinx_specific, litesdcard]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - use_litedram=true
+      - use_liteeth=true
+      - use_litesdcard
+      - disable_flatten_core
+      - no_bram
+      - spi_flash_offset=3145728
+      - log_length=512
+      - uart_is_16550
+      - has_uart1
+      - has_fpu=false
+      - has_btc=false
+    generate: [litedram_arty, liteeth_arty, litesdcard_arty, git_hash]
+    tools:
+      vivado: {part : xc7a35ticsg324-1L}
+    toplevel : toplevel
+
+  arty_a7-100-nodram:
+    default_tool: vivado
+    filesets: [core, arty_a7, soc, fpga, debug_xilinx, uart16550, xilinx_specific, litesdcard, lcdts]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - clk_input
+      - clk_frequency
+      - disable_flatten_core
+      - spi_flash_offset=4194304
+      - log_length=2048
+      - uart_is_16550
+      - has_uart1
+      - has_fpu
+      - has_btc
+      - use_litesdcard
+    generate: [git_hash]
+    tools:
+      vivado: {part : xc7a100ticsg324-1L}
+    toplevel : toplevel
+
+  arty_a7-100:
+    default_tool: vivado
+    filesets: [core, arty_a7, soc, fpga, debug_xilinx, litedram, liteeth, uart16550, xilinx_specific, litesdcard, lcdts]
+    parameters:
+      - cpus
+      - memory_size
+      - ram_init_file
+      - use_litedram=true
+      - use_liteeth=true
+      - use_litesdcard
+      - use_lcd
+      - disable_flatten_core
+      - no_bram
+      - spi_flash_offset=4194304
+      - log_length=2048
+      - uart_is_16550
+      - has_uart1
+      - has_fpu
+      - has_btc
+    generate: [litedram_arty, liteeth_arty, litesdcard_arty, git_hash]
+    tools:
+      vivado: {part : xc7a100ticsg324-1L}
+    toplevel : toplevel
+
+  antmicro-artix-dc-scm:
+    default_tool: vivado
+    filesets: [core, antmicro-artix-dc-scm, soc, fpga, debug_xilinx, litedram, liteeth, uart16550, xilinx_specific]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - use_litedram=true
+      - use_liteeth=true
+      - clk_input
+      - clk_frequency
+      - disable_flatten_core
+      - no_bram
+      - log_length=2048
+      - uart_is_16550
+      - has_uart1
+      - has_fpu
+      - has_btc
+    generate: [litedram_nexys_video, liteeth_nexys_video, git_hash]
+    tools:
+      vivado: {part : xc7a100tfgg484-1}
+    toplevel : toplevel
+
+  wukong-v2-a100t-nodram:
+    default_tool: vivado
+    filesets: [core, wukong-v2, soc, fpga, debug_xilinx, uart16550, xilinx_specific, litesdcard]
+    parameters:
+      - memory_size
+      - ram_init_file
+      - use_litedram=false
+      - use_liteeth=false
+      - use_litesdcard=true
+      - disable_flatten_core
+      - spi_flash_offset=4194304
+      - clk_frequency=100000000
+      - log_length=2048
+      - uart_is_16550
+      - has_fpu
+      - has_btc
+    generate: [litesdcard_wukong-v2, git_hash]
+    tools:
+      vivado: {part : xc7a100tfgg676-1}
+    toplevel : toplevel
+
+  wukong-v2-a100t:
+    default_tool: vivado
+    filesets: [core, wukong-v2, soc, fpga, debug_xilinx, litedram, liteeth, uart16550, xilinx_specific, litesdcard]
+    parameters:
+      - memory_size=0
+      - ram_init_file
+      - use_litedram=true
+      - use_liteeth=true
+      - use_litesdcard=true
+      - disable_flatten_core
+      - no_bram=true
+      - spi_flash_offset=4194304
+      - log_length=0
+      - uart_is_16550
+      - has_fpu
+      - has_btc
+    generate: [litedram_wukong-v2, liteeth_wukong-v2, litesdcard_wukong-v2, git_hash]
+    tools:
+      vivado: {part : xc7a100tfgg676-1}
+    toplevel : toplevel
+
+  cmod_a7-35:
+    default_tool: vivado
+    filesets: [core, cmod_a7-35, soc, fpga, debug_xilinx, uart16550, xilinx_specific]
+    parameters :
+      - memory_size
+      - ram_init_file
+      - reset_low=false
+      - clk_input=12000000
+      - clk_frequency
+      - disable_flatten_core
+      - log_length=512
+      - uart_is_16550
+      - has_fpu=false
+      - has_btc=false
+    generate: [git_hash]
+    tools:
+      vivado: {part : xc7a35tcpg236-1}
+    toplevel : toplevel
+
+  synth:
+    filesets: [core, soc, xilinx_specific]
+    generate: [git_hash]
+    tools:
+      vivado: {pnr : none}
+    toplevel: core
+
+generators:
+  git_hash_gen:
+    command: scripts/make_version_fusesoc.py
+
+generate:
+  git_hash:
+    generator : git_hash_gen
+
+  litedram_arty:
+    generator: litedram_gen
+    parameters: {board : arty}
+
+  liteeth_arty:
+    generator: liteeth_gen
+    parameters: {board : arty}
+
+  litesdcard_arty:
+    generator: litesdcard_gen
+    parameters: {vendor : xilinx, frequency : 100e6}
+
+  litesdcard_nexys_video:
+    generator: litesdcard_gen
+    parameters: {vendor : xilinx, frequency : 100e6}
+
+  litedram_nexys_video:
+    generator: litedram_gen
+    parameters: {board : nexys-video}
+
+  liteeth_nexys_video:
+    generator: liteeth_gen
+    parameters: {board : nexys-video}
+
+  litedram_acorn_cle_215:
+    generator: litedram_gen
+    parameters: {board : acorn-cle-215}
+
+  litedram_genesys2:
+    generator: litedram_gen
+    parameters: {board : genesys2}
+
+  liteeth_genesys2:
+    generator: liteeth_gen
+    parameters: {board : genesys2}
+
+  litedram_wukong-v2:
+    generator: litedram_gen
+    parameters: {board : wukong-v2}
+
+  liteeth_wukong-v2:
+    generator: liteeth_gen
+    parameters: {board : wukong-v2}
+
+  litesdcard_wukong-v2:
+    generator: litesdcard_gen
+    parameters: {vendor : xilinx, frequency : 100e6}
+
+parameters:
+  cpus:
+    datatype    : int
+    description : Number of CPU cores to include in the SoC.
+    paramtype   : generic
+    default     : 1
+
+  memory_size:
+    datatype    : int
+    description : On-chip memory size (bytes). If no_bram is set, this is the size carved out for the DRAM payload
+    paramtype   : generic
+    default     : 16384
+
+  ram_init_file:
+    datatype    : file
+    description : Initial on-chip RAM contents
+    paramtype   : generic
+
+  reset_low:
+    datatype    : bool
+    description : External reset button polarity
+    paramtype   : generic
+
+  clk_input:
+    datatype    : int
+    description : Clock input frequency in HZ (for top-generic based boards)
+    paramtype   : generic
+    default     : 100000000
+
+  clk_frequency:
+    datatype    : int
+    description : Generated system clock frequency in HZ (for top-generic based boards)
+    paramtype   : generic
+    default     : 100000000
+
+  has_fpu:
+    datatype    : bool
+    description : Include a floating-point unit in the core
+    paramtype   : generic
+    default     : true
+
+  has_btc:
+    datatype    : bool
+    description : Include a branch target cache in the core
+    paramtype   : generic
+    default     : true
+
+  disable_flatten_core:
+    datatype    : bool
+    description : Prevent Vivado from flattening the main core components
+    paramtype   : generic
+    default     : false
+
+  use_litedram:
+    datatype    : bool
+    description : Use liteDRAM
+    paramtype   : generic
+    default     : false
+
+  use_liteeth:
+    datatype    : bool
+    description : Use liteEth
+    paramtype   : generic
+    default     : false
+
+  use_litesdcard:
+    datatype    : bool
+    description : Use LiteSDCard
+    paramtype   : generic
+    default     : false
+
+  use_lcd:
+    datatype    : bool
+    description : Use LCD touchscreen interface
+    paramtype   : generic
+    default     : false
+
+  uart_is_16550:
+    datatype    : bool
+    description : Use 16550-compatible UART from OpenCores
+    paramtype   : generic
+    default     : true
+
+  has_uart1:
+    datatype    : bool
+    description : Enable second UART (always 16550-compatible)
+    paramtype   : generic
+    default     : false
+
+  no_bram:
+    datatype    : bool
+    description : No internal block RAM (only DRAM and init code carrying payload)
+    paramtype   : generic
+    default     : false
+
+  spi_flash_offset:
+    datatype    : int
+    description : Offset (in bytes) in the SPI flash of the code payload to run
+    paramtype   : generic
+
+  log_length:
+    datatype    : int
+    description : Length of the core log buffer in entries (32 bytes each)
+    paramtype   : generic
