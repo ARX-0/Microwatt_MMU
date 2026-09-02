@@ -1,9 +1,14 @@
 # PLAN.md — Porting the Microwatt Radix Page-Table Walk into the A2O MMU
 
 > Reference sources
-> - **A2O** (this repo): `rel/src/verilog/work/mmq*.v`, header `rel/src/verilog/work/mmu_a2o.vh`
-> - **Microwatt**: `~/Documents/GitHub/microwatt/mmu.vhdl` @ HEAD `5e4c61f`, ISA 3.1C-current
-> - Relative paths in this document are given as `rel/src/verilog/work/...` per convention.
+> - **A2O**: `a2o/rel/src/verilog/work/mmq*.v`, header `a2o/rel/src/verilog/work/mmu_a2o.vh`
+> - **Microwatt**: `microwatt/mmu.vhdl` @ upstream HEAD `5e4c61f`, ISA 3.1C-current
+> - **Path convention:** a bare `file.v:NNN` citation means
+>   `a2o/rel/src/verilog/work/file.v` for Verilog and `microwatt/file.vhdl` for VHDL.
+>   Full paths are given where the file lives anywhere else.
+> - `a2o/golden/src/` holds the pristine upstream A2O tree, so **every line number in this
+>   document stays valid as editing begins**. Use `tools/a2o-diff.sh` to see what has
+>   drifted.
 
 ---
 
@@ -19,7 +24,7 @@ IND=1 TLB entry whose RPN field is the real base of a flat page-table array, and
 issues **exactly one 8-byte load** to fetch the PTE. There is no root-pointer SPR, no level
 counter, no address accumulator, no multi-level descent.
 
-A case-insensitive grep across all of `rel/src/` for
+A case-insensitive grep across all of `a2o/rel/src/` for
 `radix|ptcr|prtbl|rpds|rts|partition table|process table|htaborg|sdr1|pate|patb`
 returns **zero hits**. There is no radix anywhere in A2O.
 
@@ -32,7 +37,7 @@ widths.
 The task was framed as porting into A2O's "one-hot walk". Two clarifications:
 
 - A2O's TLB sequencer `tlb_seq_q` is **not one-hot**. It is a **6-bit Gray-coded** encoding,
-  33 states used of 64 (`rel/src/verilog/work/mmq_tlb_ctl.v:343-375`). The one-hot fields in
+  33 states used of 64 (`mmq_tlb_ctl.v:343-375`). The one-hot fields in
   A2O are `tagpos_type` (8 bits, `mmu_a2o.vh:173-180`) and `tagpos_thdid` (4 bits).
 - What *is* "one-shot" is the **walk**, not the encoding — one memory access, one level.
 
@@ -41,66 +46,99 @@ new radix states **without widening the state register or perturbing the scan ch
 
 ---
 
-## 1. Repo unification (first step)
+## 1. Repo structure — DONE
 
-Target layout:
+Phase 1 (repo unification) is complete. The layout below is what exists now; it is not a
+proposal.
 
 ```
 Microwatt_MMU/
-├── a2o/                     <- everything currently A2O
-│   ├── rel/                 (git mv rel a2o/rel)
+├── PLAN.md                     this document
+├── README.md                   project overview + repo map
+├── tools/a2o-diff.sh           diff the editable A2O tree against pristine upstream
+├── a2o/                        IBM A2O core (Verilog) — the port target
+│   ├── rel/                        EDITABLE. All porting work happens here.
+│   │   ├── src/verilog/work/           the core; MMU is mmq*.v, header mmu_a2o.vh
+│   │   ├── src/verilog/trilib/         tri_* latch/primitive library
+│   │   ├── src/vhdl/                   AXI wrappers, debug, SCOM
+│   │   ├── build/ fpga/                Vivado IP + block-design TCL
+│   │   └── doc/                        A2O_UM.pdf, PowerISA_V2.07B.pdf
+│   ├── golden/                     PRISTINE snapshot of rel/src/. Never edited.
+│   │   └── src/                        308 files, 18 MB, byte-identical to release
+│   ├── GOLDEN.md                   the golden-tree rule and how to diff
 │   ├── CONTRIBUTING.md
 │   └── LICENSE
-├── microwatt/               <- copy of ~/Documents/GitHub/microwatt, .git excluded
-├── docs/                    <- existing analysis, content unchanged
-│   ├── README_MMU.md, Inteface_README.md, MMU_tlb_comparisons.md
-│   ├── *.drawio, images/, doc_copare/
-│   └── mmu.vhdl.snapshot    (the stale root mmu.vhdl)
-├── PLAN.md                  <- this file
-└── README.md                <- updated to describe the new layout
+├── microwatt/                  Microwatt core (VHDL) — the reference implementation
+│   ├── mmu.vhdl                    the radix walker being ported
+│   ├── common.vhdl                 SPR numbers, MMU/loadstore record types
+│   ├── loadstore1.vhdl             MMU request path, DSISR/DAR
+│   ├── dcache.vhdl fetch1.vhdl     dTLB / iTLB + ERAT
+│   ├── ... 75 core .vhdl files, Makefile, microwatt.core
+│   └── reference/mmu_test/         radix tree setup reference (mmu.c)
+└── docs/                       analysis notes and diagrams
+    ├── README_MMU.md               Book-E (ISA 2.07) TLB semantics study
+    ├── Inteface_README.md          full mmq.v port list, grouped by interface
+    ├── MMU_tlb_comparisons.md      ISA 2.07 vs 3.1C tlbie/RIC/PRS gap analysis
+    ├── mmu.vhdl.snapshot           stale older Microwatt mmu.vhdl, kept for diffing
+    ├── images/  doc_copare/        diagrams; Power ISA and A2O reference PDFs
+    └── *.drawio
 ```
 
-Commands:
+### Provenance
+
+- **`a2o/`** — OpenPOWER A2O core release, <https://git.openpower.foundation/cores/a2o>.
+  Power ISA 2.07, Book III-E.
+- **`microwatt/`** — <https://github.com/antonblanchard/microwatt> at commit `5e4c61f`,
+  `.git` excluded, **pruned to CPU sources only** (96 files, 1.5 MB). Removed: `tests/`,
+  `litedram/`, `liteeth/`, `litesdcard/`, `openocd/`, `micropython/`, `fpga/`,
+  `hello_world/`, `rust_lib_demo/`, `uart16550/`, `scripts/`, `constraints/`, `media/`,
+  `verilator/`, `esim/`, `sim-unisim/`. `tests/mmu/`'s text sources were kept as
+  `microwatt/reference/mmu_test/` because §2.1 and §6 cite them as the radix-tree setup
+  reference.
+
+### Golden / editable split
+
+`a2o/golden/src/` is a byte-identical snapshot of `a2o/rel/src/` as released.
+`tools/a2o-diff.sh` answers *"what has changed since upstream"* regardless of how many
+commits have landed — which is the question that matters when the port touches a handful of
+places inside several 4000-line files. See [a2o/GOLDEN.md](a2o/GOLDEN.md).
 
 ```bash
-cd /home/arx-0/Documents/GitHub/Microwatt_MMU
-mkdir -p a2o docs
-git mv rel a2o/rel
-git mv CONTRIBUTING.md LICENSE a2o/
-rsync -a --exclude '.git' /home/arx-0/Documents/GitHub/microwatt/ microwatt/
+tools/a2o-diff.sh                  # summary of changed files
+tools/a2o-diff.sh --stat           # per-file line counts
+tools/a2o-diff.sh mmq_tlb_ctl.v    # unified diff of one file
 ```
 
-**Import method:** plain copy with `.git` excluded (~75 MB of tracked files). Self-contained
-and freely editable, which suits a port where both trees are hacked side by side.
+### Cleanups performed
 
-### Cleanups to fold into the same pass
-
-| Item | Finding | Action |
+| Item | Finding | Action taken |
 |---|---|---|
-| `a2o_MMU/` | **Byte-identical duplicate** of the 14 MMU files in `rel/src/verilog/work/` (verified by `diff -q`; only delta is one blank line in `mmq_inval.v`). `a2o_MMU/tri_a20.vh` is an identical copy of `rel/src/verilog/trilib/tri_a2o.vh` with a typo'd name. | **Delete.** 2.3 MB of redundancy that will silently diverge from `rel/` once the port starts. Leave a pointer in `docs/`. |
-| Root `mmu.vhdl` | 504-line **stale upstream snapshot**, older than `microwatt/mmu.vhdl` (1878 lines). Not a work product. | Move to `docs/mmu.vhdl.snapshot`. Do not mistake it for the porting source. |
-| `.$*.drawio.bkp` (×2) | draw.io lock files, committed to git | Delete; add `.gitignore` with `.$*.bkp` (there is currently **no** `.gitignore`) |
-| `MMU vhdl cofe explaination.drawio` | 577-byte empty stub, typo'd filename | Delete |
-| `doc_copare/` (49 MB) | Contains exact duplicates of `rel/doc/A2O_UM.pdf` and `rel/doc/PowerISA_V2.07B.pdf`, plus unrelated personal files (`CMRL.pdf`, `rental things.pdf`, `lol.jpeg`) | Deduplicate; reconsider whether the PDFs belong in git |
-| `README.md` image links | Absolute `github.com/ARX-0/...` URLs | Switch to relative paths so the repo renders offline |
+| `a2o_MMU/` | Duplicate of the 14 MMU files in `a2o/rel/src/verilog/work/`; verified 14/15 byte-identical, `mmq_inval.v` differing only by a blank line. `tri_a20.vh` was an identical copy of `trilib/tri_a2o.vh` with a typo'd name. | **Deleted** (2.3 MB) |
+| Root `mmu.vhdl` | 504-line stale upstream snapshot, older than `microwatt/mmu.vhdl` (1878 lines) | Moved to `docs/mmu.vhdl.snapshot` |
+| `.$*.drawio.bkp` ×2 | draw.io lock files, committed | **Deleted** |
+| `MMU vhdl cofe explaination.drawio` | 577-byte empty stub, typo'd filename | **Deleted** |
+| Microwatt `tests/` etc. | 131 MB of tracked test binaries + vendored peripherals | **Pruned**, 149 MB → 1.5 MB |
+| `README.md` image links | Absolute `github.com/ARX-0/...` URLs | Switched to relative paths |
 
-Commit the reorg on its own branch first, so it is a clean reviewable diff separate from RTL
-work.
+**Not done, deliberately:** `docs/doc_copare/` still contains `A2O_UM.pdf` (an exact
+duplicate of `rel/doc/A2O_UM.pdf`) and three unrelated personal files (`CMRL.pdf`,
+`rental things.pdf`, `lol.jpeg`). Left alone — deleting a user's documents is their call.
+Note `PowerISA_V2.07B.pdf` in the two locations is **not** a duplicate (different md5).
 
 ### Trace array note
 
-The Microwatt clone carries a **local fork feature**: a walk-trace array (SPR 704/705, four
-2048×64 BRAMs, `mmu_event_t`, `mmu.vhdl:43-49, 106-123, 1185-1198, 1311-1372, 1764-1816`)
-plus the widening of `sprnf`/`sprnt` from 1 to 2 bits in `common.vhdl:734-735`. It is copied
-into `microwatt/` verbatim but is **not** part of the A2O port. The pure radix machinery to
-port is: `mmu.vhdl:29-41` (states), `351-371` (`check_perm_c`), `1378-1448` (shifter/mask
+The Microwatt copy carries a **local fork feature**: an MMU walk-trace array (SPR 704/705,
+four 2048×64 BRAMs, `mmu_event_t`, `mmu.vhdl:43-49, 106-123, 1185-1198, 1311-1372,
+1764-1816`) plus the widening of `sprnf`/`sprnt` from 1 to 2 bits in `common.vhdl:734-735`.
+It is kept verbatim but is **not** part of the A2O port. The pure radix machinery to port is
+`mmu.vhdl:29-41` (states), `351-371` (`check_perm_c`), `1378-1448` (shifter/mask
 generators), `1450-1877` minus `1764-1816`.
 
 ---
 
 ## 2. Structural comparison of the two MMUs
 
-| Aspect | Microwatt (`microwatt/mmu.vhdl`) | A2O (`rel/src/verilog/work/mmq*.v`) |
+| Aspect | Microwatt (`microwatt/mmu.vhdl`) | A2O (`mmq*.v`) |
 |---|---|---|
 | Architecture | ISA 3.0B/3.1 **Radix** | Book-E / ISA 2.06 **Embedded** (E, E.MF, E.LRAT, E.PT — `mmu_a2o.vh:42-52`) |
 | Walk depth | Up to **4 levels**, RTS/RPDS/NLS driven | **1 level** (E.PT indirect entry) |
@@ -192,166 +230,257 @@ These are the substance of the work, not the FSM transcription:
    `waypos_usxwr[134:139]` = UX,SX,UW,SW,UR,SR. A translation function is needed. Model it on
    the existing `ptereload_req_derived_usxwr` at `mmq_tlb_cmp.v:3576-3581`, which already
    folds R/C into the permission bits.
-5. **2 MB page size is not supported by A2O's TLB.** `TLB0PS = 0x00104444` advertises
-   4 K / 64 K / 1 M / 16 M / 1 G. Radix produces 4 K / 64 K / 2 M / 1 G. Either add PS21
-   (2 M) to `TLB0PS`, the hash tables (`mmq_tlb_ctl.v:1217-1274`) and the cmpmask tables
-   (`mmq_tlb_matchline.v:194-224`), or shatter 2 M radix leaves into 4 K entries on reload.
-   **Recommend adding 2 M** — the cmpmask scheme is already generic over power-of-2 sizes,
-   and shattering discards the entire benefit of large pages.
+5. **Radix leaf sizes must be demoted; 2 MB cannot be added.** *(Corrected during
+   implementation — the earlier plan to "add PS21 to TLB0PS" is not achievable.)*
+   Two independent limits:
+   - A2O's 4-bit size code is **log4(size/1KB)** (4K=0001, 64K=0011, 1M=0101, 16M=0111,
+     256M=1001, 1G=1010), so it can only express **power-of-4** sizes. 2 MB has no encoding.
+   - `mmq_tlb_cmp.v:3486` builds the way's size field as
+     `{1'b0, pte[ptepos_size+0 : +2]}` — only three bits survive the ptereload path, so
+     **everything above 16 MB is unreachable too**, 1 GB included.
+
+   `mmq_rtw.v` therefore installs each radix leaf at the **largest representable sub-page
+   size**: 4K→4K, 64K→64K, 2M→1M, 1G→16M. Demotion is always architecturally safe — a
+   smaller page maps a subset of the same translation with identical permissions — and the
+   final-mask shift is taken from the *installed* size so the extra EA bits merge into the
+   RPN correctly. The cost is extra TLB misses on large pages, not incorrectness. Lifting
+   this needs the way-size field widened through `mmq_tlb_cmp.v:3486`/`:3527` and new
+   cmpmask entries (`mmq_tlb_matchline.v:194-224`).
 
 ---
 
-## 3. SPR comparison — present vs absent vs needs porting
+## 3. SPR map — both cores, in Microwatt conventions
 
-### 3.1 Method
+### 3.0 Conventions adopted from Microwatt
 
-A2O decodes SPRs in **two different encodings**, and both appear in the RTL:
+All Microwatt SPR state lives in one file, `microwatt/common.vhdl`, in four constant
+families:
 
-1. **Raw swizzled instruction field** `instr[11:20]`, i.e. SPR# = `instr[16:20] || instr[11:15]`.
-   Used in `xu_spr_cspr.v`, `xu_spr_tspr.v`, `lq_spr_cspr.v`, `lq_spr_tspr.v`, `xu0_dec.v`,
-   `iuq_idec.v`, `iuq_cpl.v`. Every decode line carries the decimal number in a trailing
-   comment.
-2. **Unswizzled `slowspr_addr[0:9]`**, produced at `xu_spr_cspr.v:1355`:
-   `assign xu_slowspr_addr_out = {ex3_instr_q[16:20], ex3_instr_q[11:15]};`
-   Used in `iuq_spr.v`, `pcq_spr.v`, and **`mmq_spr.v`**.
+| Family | Type | Value form | Purpose |
+|---|---|---|---|
+| `SPR_<MNEMONIC>` | `spr_num_t` = integer 0..1023 (`common.vhdl:30`) | **decimal** | architected SPR number |
+| `<REG>_<FIELD>` | integer | **`63 - <IBM bit>`** | bit position inside an SPR |
+| `RAMSPR_<NAME>` | `unsigned(2 downto 0)` | `to_unsigned(N,3)` | slot in the paired RAM file |
+| `SPRSEL_<NAME>` | `std_ulogic_vector(3 downto 0)` | `4x"h"` | port on execute1's slow read mux |
 
-There is **no `SPRN_` macro set and no `case(spr…)` table** anywhere in A2O. The union of the
-decode lines below *is* the master list. Primary tables:
+Casing is `UPPER_SNAKE` for constants, `lower_snake` for the signals and record fields that
+hold the same registers (`ctrl.lpcr_ld`, `r.ptcr`, `r3.dsisr`), and `lower_snake` verbs for
+functions (`map_spr`, `decode_spr_num`, `assemble_lpcr`, `check_perm_c`).
+
+**The one rule worth carrying into A2O Verilog is the `63 - N` idiom.** Bit positions are
+written as an arithmetic expression against IBM big-endian numbering, never pre-computed, so
+the source stays readable against the ISA text while the hardware indexes little-endian.
+A2O's `mmu_a2o.vh` already uses MSB-first `[0:N]` ranges and bare positional defines
+(`` `define ptepos_r 45 ``), which is the same spirit. Concretely: **new radix field defines
+go in `mmu_a2o.vh` beside `ptepos_*` (`:231-240`), named `radixpos_<field>`, each carrying a
+comment giving the ISA bit number.**
+
+Two structural facts about Microwatt's convention that cannot be copied wholesale, because
+all three namespaces are exactly full:
+
+- `SPRSEL_*` is **16/16** (`common.vhdl:196-211`)
+- `RAMSPR_*` is **8/8 in both halves** (`common.vhdl:159-175`)
+- loadstore1's 3-bit `sprsel` is **8/8** (`loadstore1.vhdl:634-644`)
+
+Adding an SPR on the Microwatt side needs a width increase, not just an entry. Worth knowing
+if the reference implementation is ever extended.
+
+### 3.1 How each core decodes SPRs
+
+**Microwatt** — `decode_spr_num` (`common.vhdl:32, 967-970`) reassembles the split XFX field
+as `insn(15 downto 11) & insn(20 downto 16)`, MSB-first. Two decode tables run
+combinationally on *every* instruction at `decode1.vhdl:605-607`: `decode_ram_spr`
+(`:403-453`) for the 8-entry paired RAM file, and `map_spr` (`:455-527`) for the slow/ctrl
+SPRs. Privilege needs no table at all — `decode2.vhdl:619-621` tests SPR bit 5 directly.
+Eight SPRs are re-routed to `unit := LDST` (`decode2.vhdl:444-446` read, `:465-470` write)
+because they physically live outside execute1: DAR, DSISR, DAWR0/1, DAWRX0/1 in
+`loadstore1.vhdl`, and **PID + PTCR in `mmu.vhdl`**. MTSPR to those also sets
+`sgl_pipe := '1'` — a write to PID or PTCR must drain the pipe before it perturbs
+translation.
+
+**A2O** — two encodings coexist. The raw *swizzled* `instr[11:20]` is used in
+`xu_spr_cspr.v`, `xu_spr_tspr.v`, `lq_spr_cspr.v`, `lq_spr_tspr.v`, `xu0_dec.v`,
+`iuq_idec.v`, `iuq_cpl.v`, with the decimal number in a trailing comment on every line. The
+*unswizzled* `slowspr_addr[0:9]`, produced at `xu_spr_cspr.v:1355`
+(`{ex3_instr_q[16:20], ex3_instr_q[11:15]}`), is used in `iuq_spr.v`, `pcq_spr.v` and
+`mmq_spr.v`. There is **no `SPRN_` macro set and no `case(spr…)` table** anywhere — the union
+of the decode lines *is* the master list.
 
 | File | Lines | Content |
 |---|---|---|
-| `rel/src/verilog/work/xu_spr_cspr.v` | 1700-1843 (`_rdec`), 1885-1955 (`_re`), 1958-2020 (`_wdec`), 2023-2060 (`_we`), 2213-2650 (priv qual) | **Master core-scope table**, ~90 SPRs |
-| `rel/src/verilog/work/xu_spr_tspr.v` | 1573-1607, 1649-1665, 1716-1752 | Thread-scope (SRR/CSRR/MCSRR/DBCR/G*) |
-| `rel/src/verilog/work/lq_spr_cspr.v` | 619-632 | LQ core-scope (DAC/DVC/LESR/LSUCR0/PESR/XUCR2/XUDBG) |
-| `rel/src/verilog/work/lq_spr_tspr.v` | 274-280, 295 | LQ thread-scope (ACOP/DBCR2/DBCR3/DSCR/EPLC/EPSC/HACOP) |
-| **`rel/src/verilog/work/mmq_spr.v`** | **333-380** (`parameter [0:9] Spr_Addr_*`), matches 1199-1214, updates 1281-1420, read mux 2053-2119 | **The MMU's own SPR list** |
-| `rel/src/verilog/work/iuq_spr.v` | 1395-1433 | IU slow-SPR selects |
-| `rel/src/verilog/work/pcq_spr.v` | 535-538 | Pervasive (CESR1/RESR1/RESR2/SRAMD) |
+| `a2o/rel/src/verilog/work/xu_spr_cspr.v` | 1700-1843 (`_rdec`), 1885-1955 (`_re`), 1958-2020 (`_wdec`), 2023-2060 (`_we`), 2213-2650 (priv qual) | **master core-scope table**, ~90 SPRs |
+| `xu_spr_tspr.v` | 1573-1607, 1649-1665, 1716-1752 | thread-scope (SRR/CSRR/MCSRR/DBCR/G*) |
+| `lq_spr_cspr.v` | 619-632 | LQ core-scope (DAC/DVC/LESR/LSUCR0/PESR/XUCR2/XUDBG) |
+| `lq_spr_tspr.v` | 274-280, 295 | LQ thread-scope (ACOP/DBCR2/3/DSCR/EPLC/EPSC/HACOP) |
+| **`mmq_spr.v`** | **333-380** (`parameter [0:9] Spr_Addr_*`), matches 1199-1214, updates 1281-1420, read mux 2053-2119 | **the MMU's own SPR list** |
+| `iuq_spr.v` | 1395-1433 | IU slow-SPR selects |
+| `pcq_spr.v` | 535-538 | pervasive (CESR1/RESR1/RESR2/SRAMD) |
 
-Extracting all decoded numbers from those tables yields **138 occupied SPR numbers** in A2O.
+Counts: Microwatt declares **92 `SPR_*` constants** (`common.vhdl:34-123`) plus two unnamed
+literals, 724 LOG_ADDR and 725 LOG_DATA (`decode1.vhdl:482, 484`). A2O decodes **138
+numbers**. Reproduce the A2O set with:
 
-Microwatt's constants are all in `microwatt/common.vhdl:34-123`; `decode_spr_num`
-(`common.vhdl:967-970`) is the standard split-field `insn(15:11) & insn(20:16)`.
+```bash
+cd a2o/rel/src/verilog/work
+grep -hoE "instr\[11:20\] == 10'b[01]{10}\);[[:space:]]*//[[:space:]]*[0-9]+" \
+  xu_spr_cspr.v xu_spr_tspr.v lq_spr_cspr.v lq_spr_tspr.v \
+  | grep -oE "[0-9]+$" | sort -n -u        # 138 numbers
+```
 
-### 3.2 Decision: SPR numbering policy
+### 3.2 Numbering policy
 
-**Keep A2O's Book-E numbers. Add radix SPRs only at verified-free slots.**
+**Keep A2O's Book-E numbers. Add new registers only at verified-free slots.**
 
-Rationale: A2O's existing numbering is deeply wired into `xu_spr_cspr.v` privilege
-qualification and the debug logic. Moving DVC1/DVC2 to free 318/319 for ISA 3.1 compliance
-would touch `lq_spr_cspr.v`, `xu_spr_cspr.v` and the data-value-compare debug path for no
-functional gain in the port. Consequence: **software needs an A2O-specific SPR map** — it is
-not drop-in Linux-compatible. This is already true of A2O today (LPIDR at 338, MAS registers,
-no DSISR) so the port does not make it worse.
+A2O's numbering is deeply wired into `xu_spr_cspr.v` privilege qualification and the debug
+path. Chasing ISA 3.1 numbering would mean relocating DVC1/DVC2, IAC2-4, DBSR, TSR, MAS5 and
+MMUCR3 — see §3.4 — for no functional gain in an MMU port. The consequence is that
+**software needs an A2O-specific SPR map**; that is already true of A2O today (LPIDR at 338,
+the MAS registers, no DSISR) so the port does not make it worse.
 
-### 3.3 Present in both — same number, same architectural role
+### 3.3 Band 1 — same number, same register in both cores
 
-| SPR | # | Microwatt | A2O | Verdict |
-|---|---|---|---|---|
-| **PID** | **48** | `mmu.vhdl:61`, **12 bits** (`52x"0" & r.pid`, read at `:1205`) | `mmq_spr.v:333`, **14 bits** (`spr_data[50:63]`, `:1281-1285`), **per-thread** (`pid0_q`/`pid1_q`) | **Keep 48.** Numerically identical, semantically compatible. But ISA 3.1 PIDR is 32-bit and A2O's 14-bit PID is the field actually compared in `mmq_tlb_matchline.v:163`. Either **widen to ≥20 bits** (touches `` `PID_WIDTH ``, the 122-bit tag, the 168-bit way, the matchline, and `` `PID_WIDTH_ERAT 8 ``) or accept the 14-bit limit and document it. Recommend accepting 14 bits for v1. |
+No work required. Microwatt and A2O agree:
 
-### 3.4 Present in both — **different number** (hard numeric collisions)
+| SPR | # | SPR | # | SPR | # |
+|---|---|---|---|---|---|
+| DSCR | 17 | SPRG3U | 259 | TBUW | 285 |
+| DEC | 22 | TB | 268 | PVR | 287 |
+| SRR0 | 26 | TBU | 269 | SIAR | 796 |
+| SRR1 | 27 | SPRG0-3 | 272-275 | TAR | 815 |
+| **PID** | **48** | TBLW | 284 | | |
+| VRSAVE | 256 | | | | |
 
-| Register | ISA 3.1 / Microwatt # | A2O # | A2O occupant of the ISA-3.1 number | Resolution |
-|---|---|---|---|---|
-| **LPIDR** | **319** | **338** (`mmq_spr.v:335`, 8 bits, core-wide) | **DVC2** (`lq_spr_cspr.v:624`) | **Keep A2O's 338.** Do not decode 319. |
-| **LPCR** | **318** | *(absent)* | **DVC1** (`lq_spr_cspr.v:623`) | **Do not add LPCR at 318.** Put the radix-mode control bit in `MMUCR1` instead (see §3.6). |
+The MMU-relevant one is **PID = 48**. Microwatt: 12 bits (`mmu.vhdl:61`), read back
+zero-extended (`:1205`). A2O: **14 bits**, per-thread `pid0_q`/`pid1_q`
+(`mmq_spr.v:333, 1281-1285`), and it is the field actually compared in the TLB matchline
+(`mmq_tlb_matchline.v:163`). ISA 3.1's PIDR is 32-bit. Either widen A2O's field — which
+touches `` `PID_WIDTH ``, the 122-bit tag, the 168-bit way, the matchline and
+`` `PID_WIDTH_ERAT 8 `` — or accept 14 bits and document the limit. **Recommend accepting 14
+bits for v1**; it is not on the critical path for a working radix walker.
 
-Microwatt note: `LPCR` (SPR 318) exists there with only 6 writable bits
-(`execute1.vhdl:2198-2205`), and `LPCR[UPRT]`/`LPCR[HR]` are **hardwired to `'1'`**
-(`execute1.vhdl:429-430`) and never consulted by the MMU. So there is nothing of substance to
-port from LPCR.
+### 3.4 Band 2 — HARD COLLISIONS
 
-Also note the **entire 304-319 block is Book-E debug** in A2O:
+Microwatt's number is occupied by a *different* A2O register. This is where A2O's Book-E
+heritage and ISA 3.x diverge, and it extends well beyond the MMU:
+
+| Microwatt / ISA 3.x | # | A2O occupant | A2O decode site |
+|---|---|---|---|
+| HSPRG0 | 304 | **DBSR** | `xu_spr_tspr.v:1579` |
+| HRMOR | 313 | **IAC2** | `xu_spr_cspr.v:1791` |
+| HSRR0 | 314 | **IAC3** | `xu_spr_cspr.v:1792` |
+| HSRR1 | 315 | **IAC4** | `xu_spr_cspr.v:1793` |
+| **LPCR** | **318** | **DVC1** | `lq_spr_cspr.v:623` |
+| **LPIDR** *(ISA 3.1; absent in Microwatt)* | **319** | **DVC2** | `lq_spr_cspr.v:624` |
+| HMER | 336 | **TSR** | `xu_spr_tspr.v:1604` |
+| HEIR | 339 | **MAS5** | `xu_spr_cspr.v:1820` |
+| PIR | 1023 | **MMUCR3** | `xu_spr_cspr.v:1831` |
+
+The pattern: **A2O's Book-E debug block (304-319), timer block (336-343) and MMU control
+block (1012-1023) sit exactly where ISA 3.x puts its hypervisor registers, HEIR, and PIR.**
+A2O's own PIR is at 286 and its LPIDR at 338. The full 304-319 range is Book-E debug —
 
 ```
 304 DBSR   306 DBSRWR  307 EPCR   308 DBCR0  309 DBCR1  310 DBCR2  311 MSRP
 312-315 IAC1-4        316 DAC1   317 DAC2   318 DVC1   319 DVC2
 ```
 
-**305 is the only free slot in 304-319.** The ISA 3.1 hypervisor block
-(HSPRG0/1, HDSISR, HDAR, HSRR0/1) has nowhere to land there — a further reason not to chase
-ISA 3.1 numbering.
+— leaving **305 as the only free slot in the whole block**. The ISA 3.1 hypervisor set has
+nowhere to land there.
 
-### 3.5 Present in Microwatt, **ABSENT in A2O** — must be ported
+**None of these collisions block the radix port**, because none of the colliding registers
+is needed by it (see §3.5). They are recorded because any future ISA 3.1 compliance work
+will hit them, and because assuming ISA numbering in test software would silently alias onto
+data-value-compare debug registers.
 
-| Register | Microwatt | A2O status | Proposed A2O # | Notes |
-|---|---|---|---|---|
-| **PTCR** | **464** (`common.vhdl:58`), full 64-bit reg `r.ptcr` (`mmu.vhdl:60`), written on `sprnt="01"` (`:1549-1555`), read at `:1204` | **ABSENT** | **464 — verified FREE** | Nothing in 352-436 or 448-511 is decoded anywhere in A2O. Clean adoption of the ISA number. Only `ptcr(55:12)` is used, as the PATB base. |
-| **PRTBL / PGTBL** | **Not an SPR.** Memory-resident, cached in `r.prtbl` (`mmu.vhdl:1583`), `r.pgtbl0`, `r.pgtbl3` with `ptb_valid`/`pt0_valid`/`pt3_valid` | ABSENT | **none — keep memory-resident** | Mirror Microwatt: cache the fetched PRTE0 in `mmq_rtw` latches with a valid bit, invalidated on PTCR/PID write. |
-| **PARTTBL / PATB** | Not an SPR — derived from PTCR | ABSENT | none | Microwatt's partition table is **vestigial**: hardwired to entry 0, dword 1 (`mmu.vhdl:1846`); LPID and PATS ignored; no gRA→hRA translation (header comment `mmu.vhdl:8-10`). |
-| **DSISR** | **18** (`common.vhdl:38`), `r3.dsisr` 32-bit in `loadstore1.vhdl:164` | ABSENT (A2O uses **ESR**=62 and **DEAR**=61) | none | **Map radix fault codes onto A2O's ESR/DEAR**, not DSISR. Microwatt's DSISR bits: 33=invalid, 36=perm, 44=badtree, 45=rc_error. |
-| **DAR** | **19** (`common.vhdl:39`) | ABSENT (A2O uses DEAR=61) | none | Same. |
-| **SDR1** | 25 (hash MMU legacy) | ABSENT (**25 free**) | none | Radix-only port; not needed. |
-| **LPIDR** | ABSENT in Microwatt entirely (`grep -rn LPID --include=*.vhdl` → nothing) | present at 338 | — | Nothing to port. |
+### 3.5 Band 3 — in Microwatt, free in A2O
 
-### 3.6 Present in A2O, absent in Microwatt — relevant to the port
+Portable at the ISA number if ever wanted:
 
-| SPR | # | `mmq_spr.v` | Role | Port relevance |
-|---|---|---|---|---|
-| **MMUCR0** | 1020 | `:336`, 20 bits | `0`=ExtClass, `1`=TID_NZ (derived), `2:3`=GS/TS, `4:5`=TLBSel, `6:19`=TID. HW-written by both ERATs | Per-thread walk context. Radix walker must maintain it. |
-| **MMUCR1** | 1021 | `:337`, 32 bits | `0`IRRE `1`DRRE `2`REE `3`CEE `4`,`5` ctx-sync/isync inval disable, `6:11` parity inject, `12:15` ICTID/ITTID/DCTID/DTTID, `16`DCCD, `17`TLBWE_BINV, `18`TLBI_MSB, `19`TLBI_REJ, `20:22` err-detect (clear-on-read), `23:31` EEN. Boot `0x0C000000` | **Put the radix-mode enable here** — pick a documented free bit, call it `MMUCR1[RXE]`. This is the substitute for LPCR[HR]/[UPRT]. |
-| **MMUCR2** | 1022 | `:338`, 32 bits | `[0]`=act_override; `[12:15]`=pgsize5 … `[28:31]`=pgsize1. Boot `0x000A7531` = {1G,16M,1M,64K,4K} | **Must change if 2 M is added** (§2.3 item 5). |
-| **MMUCR3** | 1023 | `:339`, 15 bits | `49`=X-bit, `50:51`=R,C, `52`=ECL, `53`=TID_NZ, `54:55`=Class, `56:57`=WLC, `58:59`=ResvAttr, `60:63`=ThdID. Boot `0x000F`. Has a backdoor test mode (`:1367-1379`) | **Radix reload must supply R/C here.** |
-| **MMUCFG** | 1015 | `:358`, RO | `0x08558341`: LPIDSIZE=8, RASIZE=42, LRAT/TWC boot bits, PIDSIZE=13 (→14 bits), NTLBS=0, MAVN=1 | Update PIDSIZE if PID is widened. |
-| **MMUCSR0** | 1012 | `:359` | Only bit 61 `TLB0_FI`; set by write, **cleared by HW** when the 128-row flush sweep completes | Reuse for radix TLB flush. |
-| **TLB0CFG** | 688 | `:360`, RO except boot bits | `0x0400A200`: ASSOC=4, NENTRY=512, IPROT=1, HES=1; bits 45/46/47 = PT/IND/GTWE from boot latches | `tlb0cfg_ind` gates entry to `TlbSeq_Stg11` (`mmq_tlb_ctl.v:1603,1641,1679,1717,1750`). **Add a parallel `tlb0cfg_radix` bit** to gate the new radix states. |
-| **TLB0PS** | 344 | `:361`, RO | `0x00104444` = PS20(1G), PS14(16M), PS10(1M), PS6(64K), PS2(4K) | **Change to `0x00304444`** to advertise 2 M. |
-| **LRATCFG** | 342 | `:362`, RO | `0x00542008`: fully-assoc, LASIZE=42, LPID=1, NENTRY=8 | The A2O analogue of the partition table. |
-| **LRATPS** | 343 | `:363`, RO | `0x51544400` = 1T/256G/16G/4G/1G/256M/16M/1M | |
-| **EPTCFG** | 350 | `:364`, RO | `0x00091942`: PS1=256M/SPS1=64K, PS0=1M/SPS0=4K | Book-E walker only; unchanged. |
-| **LPER / LPERU** | 56 / 57 | `:365-366` | LRAT-miss error capture; HW-written on LRAT miss (`mmq_tlb_ctl.v:3218-3226`) | Reusable for radix partition-scoped faults. |
-| **MESR1 / MESR2** | 916 / 917 | `:342-343` | MMU error status | **Add radix fault reporting bits here.** |
-| **MAS0-MAS8** | 624, 625, 626, 627, 628, 630, 631, 339, 341, 944 | `:344-353` | Book-E TLB access registers | **Untouched.** Radix does not use MAS; `tlbwe`/`tlbre`/`tlbsx` keep working. Note **MAS5 is at 339, not 629** — 629 is free. |
-| **MAS pairs (64-bit)** | 348 MAS5_MAS6, 349 MAS8_MAS1, 372 MAS7_MAS3, 373 MAS0_MAS1 | `:354-357` | Paired 64-bit accesses, high half at `:2104-2119` | Untouched. |
+DSISR 18, DAR 19, CFAR 28, CTRL 136, CTRLW 152, FSCR 153, DAWR0/1 180/181, CIABR 187,
+DAWRX0/1 188/189, HFSCR 190, HSPRG1 305, HMEER 337, HDEXCU 455, **PTCR 464**,
+HASHKEYR 468, HASHPKEYR 469, HDEXCR 471, the PMU block 768-798 *except* SIAR 796,
+DEXCRU 812, DEXCR 828.
 
-MMU SPR hit detection: `spr_match_any_mmu` at `mmq_spr.v:1198-1214` is the OR of all 30
-addresses `mmq_spr` owns; when unset, `mmq_spr` forwards the slowspr bus onward
-(`:2073`). **A new PTCR must be added to this OR-tree** or its `done` will never assert.
-
-Access path: `xu_mm_slowspr_{val,rw,etid,addr,data,done}` in (`mmq_spr.v:307-313`) →
-3-deep latch pipeline `_in_q` → `_int_q` → `_out_q` → `mm_iu_slowspr_*` out
-(`:2069-2074, 2121-2126`). `spr_ctl[0]`=val, `[1]`=rw (0=write, 1=read), `[2]`=done.
-
-### 3.7 Verified-free SPR numbers in A2O
-
-Checked against the extracted 138-number occupied set:
+Verified-free ranges in A2O, checked against the 138-number occupied set:
 
 ```
-25, 29, 305,
-352-436,  448-511   (includes 464 = PTCR)
-512-543              (entire block, nothing decoded)
-604-623, 629, 632-687, 689-696
-704, 705, 706-795
-1017, 1018, 1019
+25, 29, 305, 352-436, 448-511 (incl. 464 = PTCR), 512-543 (entire block),
+604-623, 629, 632-687, 689-696, 704, 705, 706-795, 1017, 1018, 1019
 ```
 
-Only **PTCR = 464** is strictly required by the port. If a radix walk-trace register is ever
-wanted, **704/705 are free in A2O** and happen to match the numbers the Microwatt fork
-already uses for its trace array — a convenient convention even though the trace array itself
-is not being ported.
+### 3.6 Band 4 — in A2O, absent from Microwatt
 
-### 3.8 Consolidated present / absent / port table
+Book-E machinery with no ISA 3.x counterpart. **All untouched by the port**, except where
+noted:
+
+| SPR | # | Role | Port relevance |
+|---|---|---|---|
+| **MMUCR0** | 1020 | ExtClass, TID_NZ, GS/TS, TLBSel, TID; HW-written by both ERATs | per-thread walk context; walker must maintain |
+| **MMUCR1** | 1021 | 32 bits: IRRE/DRRE/REE/CEE, parity inject, ICTID/DCTID, TLBWE_BINV, error status. Boot `0x0C000000` | **radix-mode enable `MMUCR1[RXE]` goes here** — see §3.7 |
+| **MMUCR2** | 1022 | page-size probe order, 5× 4-bit fields at `[12:31]`. Boot `0x000A7531` = {1G,16M,1M,64K,4K} | **must change if 2 M is added** (§2.3 item 5) |
+| **MMUCR3** | 1023 | X-bit, R, C, ECL, Class, WLC, ResvAttr, ThdID. Boot `0x000F` | **radix reload must supply R/C here** |
+| **MMUCFG** | 1015 | RO `0x08558341`: LPIDSIZE=8, RASIZE=42, PIDSIZE=13 (→14 bits) | update PIDSIZE only if PID is widened |
+| **MMUCSR0** | 1012 | bit 61 `TLB0_FI`, self-clearing after the 128-row flush sweep | reuse for radix TLB flush |
+| **TLB0CFG** | 688 | RO `0x0400A200`: ASSOC=4, NENTRY=512; bits 45/46/47 = PT/IND/GTWE boot latches | `tlb0cfg_ind` gates `TlbSeq_Stg11`; **add a parallel `tlb0cfg_radix`** |
+| **TLB0PS** | 344 | RO `0x00104444` = 1G/16M/1M/64K/4K | **change to `0x00304444`** to advertise 2 M |
+| **LRATCFG / LRATPS** | 342 / 343 | 8-entry LRAT config; 1T…1M page sizes | the A2O analogue of the partition table; **and see §5 P2-11** |
+| **LPER / LPERU** | 56 / 57 | LRAT-miss capture, HW-written (`mmq_tlb_ctl.v:3218-3226`) | reuse for partition-scoped radix faults |
+| **MESR1 / MESR2** | 916 / 917 | MMU error status | add radix fault status bits |
+| **EPTCFG** | 350 | E.PT sub-page config (256M/64K, 1M/4K) | Book-E walker only; unchanged |
+| **MAS0-MAS8** | 624-628, 630, 631, 339, 341, 944 | Book-E TLB access registers | **untouched**; `tlbwe`/`tlbre`/`tlbsx` keep working. Note **MAS5 is at 339, not 629** |
+| **MAS pairs** | 348, 349, 372, 373 | 64-bit paired accesses | untouched |
+| ESR / DEAR | 62 / 61 | Book-E fault status + address | **radix faults map here**, not to DSISR/DAR |
+| EPCR, GSPRG0-3, GSRR0/1, GDEAR, GESR, GPIR | 307, 368-371, 378-383 | guest/hypervisor set | untouched |
+
+### 3.7 What the port actually needs
+
+Microwatt implements **exactly two** MMU configuration SPRs:
+
+- **`SPR_PID` = 48** — 12 bits (`mmu.vhdl:61`)
+- **`SPR_PTCR` = 464** — 64 bits stored, **only `[55:12]` used** (`mmu.vhdl:1846`:
+  `addr := x"00" & r.ptcr(55 downto 12) & x"008"`). PATS and LPID are ignored; the
+  partition table is read at entry 0, doubleword 1, unconditionally.
+
+plus `LPCR` = 318 with 8 defined bits. Everything else radix needs is memory-resident:
+`PRTBL`/`PGTBL` are cached copies of memory in `r.prtbl`/`r.pgtbl0`/`r.pgtbl3` with
+`ptb_valid`/`pt0_valid`/`pt3_valid`, not SPRs.
+
+**Two facts that determine the A2O design:**
+
+1. **`LPCR[UPRT]` and `LPCR[HR]` are hardwired to `'1'`** (`execute1.vhdl:429-430`).
+   Microwatt is *permanently* in radix mode with a process table — there is no way to turn
+   radix off, and the MMU never consults either bit. A2O must keep Book-E working, so a mode
+   bit is **not optional**. This is the one place the port cannot follow Microwatt, and it is
+   why the radix enable is `MMUCR1[RXE]` rather than a ported LPCR. Since 318 is DVC1
+   anyway (§3.4), the collision and the design need point the same way.
+2. Microwatt has **no LPIDR, no AMR/IAMR/UAMOR/AMOR, no HDSISR/HDAR, no PSSCR, no SDR1,
+   no ASDR, no TIDR, no HDEC**. `dcache.vhdl:1103` (*"we don't yet implement AMR, thus no
+   KUAP"*) and `mmu.vhdl:365` (*"no IAMR, so no KUEP support for now"*) say so explicitly.
+   **Key-based protection is therefore out of scope by construction** — there is nothing to
+   port.
+
+Also note two live gaps in the Microwatt fork itself, in case they confuse a reader of the
+reference: `SPR_HFSCR` (190) is declared at `common.vhdl:64` but absent from `map_spr`, and
+`SPR_704`/`SPR_705` have full loadstore1 + mmu plumbing but are missing from both `map_spr`
+and the `unit := LDST` lists, so they are unreachable from software.
+
+### 3.8 Consolidated verdict
 
 | SPR | Microwatt | A2O | Verdict |
 |---|---|---|---|
-| **PID** | 48 (12b) | 48 (14b, per-thread) | **Present in both, same number.** Keep 48. Optionally widen the A2O field. |
-| **PTCR** | 464 | — | **ABSENT in A2O → PORT to 464 (verified free).** |
-| **PRTBL / PGTBL** | memory-resident, cached in MMU regs | — | **ABSENT → port as latches, not an SPR.** |
-| **PARTTBL / PATB** | derived from PTCR, vestigial | — | **ABSENT → not needed** (A2O's LRAT covers partition scope). |
-| **LPCR** | 318 (6 writable bits, HR/UPRT hardwired) | — | **DO NOT PORT.** 318 = DVC1. Use an `MMUCR1[RXE]` bit instead. |
-| **LPIDR** | — | **338** | **A2O only.** Keep 338; 319 = DVC2. |
-| **DSISR / DAR** | 18 / 19 | — (ESR 62 / DEAR 61) | **Map radix faults onto A2O ESR/DEAR.** |
-| **SDR1** | 25 | — (25 free) | Not needed (radix-only). |
-| **MAS0-MAS8 + 4 pairs** | — | 624-628, 630, 631, 339, 341, 944, 348, 349, 372, 373 | **A2O only. Untouched.** |
-| **MMUCR0-3** | — | 1020-1023 | **A2O only. Extend MMUCR1 (mode bit), MMUCR2 (page sizes), MMUCR3 (R/C).** |
-| **MMUCFG / TLB0CFG / TLB0PS** | — | 1015 / 688 / 344 | **A2O only. Update constants** (PIDSIZE, radix-enable bit, 2 M). |
-| **LRATCFG / LRATPS / LPER / LPERU** | — | 342 / 343 / 56 / 57 | **A2O only. Reuse for partition-scoped radix faults.** |
-| **MMUCSR0** | — | 1012 | **A2O only. Reuse for radix TLB flush.** |
-| **MESR1 / MESR2** | — | 916 / 917 | **A2O only. Add radix fault status bits.** |
+| **PID** | 48 (12b) | 48 (14b, per-thread) | **both, same number** — keep 48, accept 14 bits for v1 |
+| **PTCR** | 464 (64b, `[55:12]` used) | — | **ABSENT → PORT to 464 (verified free)** |
+| **PRTBL / PGTBL** | memory-resident, cached in MMU regs | — | **port as latches, not an SPR** |
+| **PARTTBL / PATB** | derived from PTCR, vestigial | — | **not needed** — A2O's LRAT covers partition scope |
+| **LPCR** | 318, 8 bits, HR/UPRT hardwired 1 | — (318 = DVC1) | **DO NOT PORT** — use `MMUCR1[RXE]` |
+| **LPIDR** | absent | 338 | **A2O only** — keep 338; 319 = DVC2 |
+| **DSISR / DAR** | 18 / 19 | — (ESR 62 / DEAR 61) | **map radix faults onto ESR/DEAR** |
+| **AMR / IAMR / UAMOR** | absent | absent | **nothing to port** — no KUAP/KUEP in either core |
+| **SDR1** | absent (25 free in A2O) | absent | not needed — radix only |
+| **MAS0-8, MMUCR0-3, MMUCFG, TLB0CFG/PS, LRAT*, LPER, MESR1/2, MMUCSR0** | — | see §3.6 | **A2O only** — extend MMUCR1/2/3, TLB0CFG, TLB0PS; rest untouched |
 
-**Net result: exactly one new SPR number is claimed — PTCR at 464. There are no numeric
-collisions introduced by the port.**
+**Net: exactly one new SPR number is claimed — PTCR at 464 — and it collides with nothing.
+The nine Band-2 collisions are all outside the port's footprint.**
 
 ---
 
@@ -359,7 +488,7 @@ collisions introduced by the port.**
 
 ### 4.1 Approach
 
-A new module `rel/src/verilog/work/mmq_rtw.v`, instantiated in `mmq.v` inside the same
+A new module `a2o/rel/src/verilog/work/mmq_rtw.v`, instantiated in `mmq.v` inside the same
 `generate if (EXPAND_TLB_TYPE > 0)` block as `mmq_htw` (block opens at `mmq.v:2685`;
 `mmq_htw` instantiated at `mmq.v:3681`). Mode-selected by `MMUCR1[RXE]`.
 
@@ -376,6 +505,12 @@ Interface (identical shape to `mmq_htw`):
   `mmq_htw.v:1401-1409`
 - **Out:** `rtw_quiesce` — per-thread walk-in-progress, holds the ERAT-miss stall. **Must be
   driven** or the core resumes before the reload lands (cf. `mmq_htw.v:85, 555-560`).
+- **In:** `xu_ex5_flush` (`mmq.v:199`) — drives the per-slot `killed` bit (§5 P0-1).
+- **Out:** `mm_xu_derat_rel_val` + the saved `itag`/`emq` — **must be driven on every
+  termination path without exception**, or the LSU leaks an EMQ entry and the thread hangs
+  (§5 P0-3). This is the single most important interface obligation in the module.
+- **Internal:** per-slot watchdog counter (§5 P1-7) and retry counter (§5 P1-8). A2O has no
+  timeout anywhere today, and a 4-5 level walk has 4-5x the opportunities to hang.
 
 ### 4.2 State mapping
 
@@ -388,7 +523,13 @@ Interface (identical shape to `mmq_htw`):
 | `RADIX_READ_WAIT` | `RtwSeq_ReadWait` | Decode PDE: V/L/perm/RC, or descend a level (`mmu.vhdl:1691-1747`) |
 | `RADIX_LOAD_TLB` | `RtwSeq_Reload` | Drive `ptereload_req_*` |
 | `RADIX_FINISH` | `RtwSeq_Fault` | Raise the fault back to `mmq_tlb_ctl` |
+| *(no counterpart)* | `RtwSeq_Killed` | **New, §5 P0-1.** Flushed mid-walk: retire the slot, no TLB write, no exception, but still return `mm_xu_derat_rel_*` |
+| *(no counterpart)* | `RtwSeq_Timeout` | **New, §5 P1-7.** Watchdog expiry: terminal state returning `derat_rel` with a machine-check indication |
 | `IDLE` / `DO_TLBIE` / `TLBWAIT` | *(not ported)* | A2O's `TlbSeq_Idle` and `mmq_inval` already cover arbitration and invalidation |
+
+**Every entry into `RtwSeq_Lookup` must re-test the `killed` bit and the reservation** before
+issuing level N+1 (§5 P0-1, P0-4, P1-6). `nonspec` is sampled once at handoff and is never
+re-evaluated by the hardware, so the walker has to do it itself.
 
 Microwatt's `TLBWAIT` arbitration (`mmu.vhdl:1588-1639`) and the whole PWC are **not ported
 in v1** — A2O has no page-walk cache. Note for future work: this is where Microwatt's
@@ -449,13 +590,24 @@ Use A2O's idiom throughout, or the module will not behave the same in sim and sy
    `ptb_valid` and force TLB invalidate-all; on `mtspr PID` clear `pt0_valid` and invalidate.
    Mirrors `mmu.vhdl:1544-1555`. Note A2O's ERATs, like Microwatt's L1 TLBs, store a
    truncated PID (`` `PID_WIDTH_ERAT 8 ``) so a PID change needs a full ERAT flush.
-6. **No R/C writeback path exists.** `imq_arb_mmq_st_req_avail` exists but is used only for
+6. **No R/C writeback path exists — and must not be added. See §5 P0-2.** `imq_arb_mmq_st_req_avail` exists but is used only for
    TLBIVAX/TLBI-COMPLETE broadcast, carrying `{lpid, 5'b0, ind, gs, lbit}` as store data
    (`lq_imq.v:610-618`). There is **no read-modify-write or atomic primitive available to the
    MMU**. Adopt A2O's existing answer: fold R/C into the permission bits at reload and take a
    permission fault, letting software set R/C — which is exactly what Microwatt does too
    (`mmu.vhdl` has no write path at all; `loadstore1.vhdl:1237-1253` re-issues the walk on a
    perm/RC error in case the PTE was updated).
+   **This is a P0 constraint, not a preference:** a hardware R/C store would be an
+   architecturally-visible memory write issued on behalf of a non-committed instruction, and
+   A2O's `WAIT_UPDATES` machinery (`mmu_a2o.vh:52`, `mmq_spr.v:1420-1497`) covers SPR latches
+   only — there is no pending-memory-write path anywhere in `mmq_*`.
+7. **Per-level LRAT translation in guest mode. See §5 P2-11.** In guest mode (`gs==1`) every
+   level's real address is derived from guest-writable memory and must go through
+   `mmq_tlb_lrat.v` *before* the load is issued, raising `lrat_miss` on failure — reuse the
+   `lrat_tag4_hit_status == 4'b1100` gate (`mmq_tlb_ctl.v:2980`). Bounds-check every derived
+   address against `` `REAL_ADDR_WIDTH ``. A2O never needed this because its single walk
+   address came from a hypervisor-installed indirect entry. **Security requirement, not an
+   optimisation.**
 
 ### 4.6 Free state encodings
 
@@ -472,30 +624,186 @@ if a second reference is wanted.
 
 | File | Change |
 |---|---|
-| **`rel/src/verilog/work/mmq_rtw.v`** *(new)* | The radix walker |
-| `rel/src/verilog/work/mmu_a2o.vh` | Add radix PDE/PTE field defines; add the 2 M page-size code; bump `` `PID_WIDTH `` if widening PID |
-| `rel/src/verilog/work/mmq.v` | Instantiate `mmq_rtw` in the `generate` block at `:2685`; mux `htw_lsu_*` vs `rtw_lsu_*` and `ptereload_req_*` on `MMUCR1[RXE]`; route `an_ac_reld_*` (`:3745-3752`) to both walkers |
-| `rel/src/verilog/work/mmq_tlb_ctl.v` | New `TlbSeq_Radix*` params (`:343-375`); new case arms (`:1427-2243`); sensitivity list (`:1382-1392`); default prologue (`:1394-1426`); branch in from `Stg15-Stg18` where the IND=1 path currently goes to `Stg29` (`:2174`) |
-| `rel/src/verilog/work/mmq_tlb_cmp.v` | Radix-PTE→way conversion beside `:3486`/`:3527`; `tlb_rtw_req_valid` handoff beside `:5071-5089`; 2 M cmpmask |
-| `rel/src/verilog/work/mmq_spr.v` | `Spr_Addr_PTCR = 10'b0111010000` (464) near `:333-366`; add to `spr_match_any_mmu` OR-tree (`:1198-1214`); register update logic (`:1281-1420`); read mux (`:2053-2073`); `TLB0PS` → `0x00304444`; `MMUCFG` PIDSIZE if widened; radix status bits in MESR1/2 |
-| `rel/src/verilog/work/xu_spr_cspr.v` | `ex2_ptcr_rdec` / `_wdec` / `_re` / `_we` in the `:1767-1842` / `:1885-2060` tables; hypervisor-privilege qualification at `:2213-2650` |
-| `rel/src/verilog/work/mmq_tlb_matchline.v` | 2 M `cmpmask` / `xbitmask` entries (`:194-224`) |
-| `rel/src/verilog/work/mmq_inval.v` | **Preferably untouched** — mux the two walkers upstream in `mmq.v`. If a fourth arbiter user is added instead: FSM `:919-1400`, mux `:1609-1712`, token counter `:1601-1608` |
+| **`a2o/rel/src/verilog/work/mmq_rtw.v`** *(new)* | The radix walker |
+| `a2o/rel/src/verilog/work/mmu_a2o.vh` | Add radix PDE/PTE field defines; add the 2 M page-size code; bump `` `PID_WIDTH `` if widening PID |
+| `a2o/rel/src/verilog/work/mmq.v` | Instantiate `mmq_rtw` in the `generate` block at `:2685`; mux `htw_lsu_*` vs `rtw_lsu_*` and `ptereload_req_*` on `MMUCR1[RXE]`; route `an_ac_reld_*` (`:3745-3752`) to both walkers |
+| `a2o/rel/src/verilog/work/mmq_tlb_ctl.v` | New `TlbSeq_Radix*` params (`:343-375`); new case arms (`:1427-2243`); sensitivity list (`:1382-1392`); default prologue (`:1394-1426`); branch in from `Stg15-Stg18` where the IND=1 path currently goes to `Stg29` (`:2174`) |
+| `a2o/rel/src/verilog/work/mmq_tlb_cmp.v` | Radix-PTE→way conversion beside `:3486`/`:3527`; `tlb_rtw_req_valid` handoff beside `:5071-5089`; 2 M cmpmask |
+| `a2o/rel/src/verilog/work/mmq_spr.v` | `Spr_Addr_PTCR = 10'b0111010000` (464) near `:333-366`; add to `spr_match_any_mmu` OR-tree (`:1198-1214`); register update logic (`:1281-1420`); read mux (`:2053-2073`); `TLB0PS` → `0x00304444`; `MMUCFG` PIDSIZE if widened; radix status bits in MESR1/2 |
+| `a2o/rel/src/verilog/work/xu_spr_cspr.v` | `ex2_ptcr_rdec` / `_wdec` / `_re` / `_we` in the `:1767-1842` / `:1885-2060` tables; hypervisor-privilege qualification at `:2213-2650` |
+| `a2o/rel/src/verilog/work/mmq_tlb_matchline.v` | 2 M `cmpmask` / `xbitmask` entries (`:194-224`) |
+| `a2o/rel/src/verilog/work/mmq_inval.v` | **Must be revisited** (§5 P0-5). Mux the two walkers upstream in `mmq.v` where possible, but the six deadlock detours (`:1015, 1030, 1100, 1130, 1321, 1332`) and the token counter (`:1598-1616`) are directly implicated by 4-5x more request events. Widen the reservation-clear match (§5 P0-4). FSM `:919-1400`, mux `:1609-1712` |
+| `a2o/rel/src/verilog/work/mmq_htw.v` | Reservation-clear widening (§5 P0-4), if the radix walker reuses the HTW slot/reservation scheme rather than duplicating it |
 
 ---
 
-## 5. Verification
+## 5. Out-of-order ordering constraints — READ BEFORE WRITING THE FSM
 
-No simulation flow exists in this repo today — `rel/build/` is Vivado synthesis TCL only.
+A2O is an **out-of-order, 2-threaded** core: register renaming, reservation stations, a
+completion buffer, a store queue. Microwatt is **in-order and single-threaded**, and its
+`mmu.vhdl` gets all of its ordering for free.
+
+The clearest illustration: Microwatt dispatches `tlbie` **through the same FSM** as a walk
+(`mmu.vhdl:1524-1525`, `1571-1574`). Because the MMU is in `DO_TLBIE`, it structurally
+cannot simultaneously be in `RADIX_READ_WAIT`. A `tlbie` and a walk are mutually exclusive
+by construction. One core, one FSM, one outstanding request, no races.
+
+**That serialisation assumption evaporates in A2O.** Everything below is a consequence.
+Section 4's walker design as written would produce a walker that hangs the core; the P0
+items are mandatory changes, not refinements.
+
+### 5.1 The A2O contract that must be preserved
+
+**Rule 1 — never leave the core on behalf of a speculative request.**
+`nonspec` gates the walk handoff absolutely (`mmq_tlb_cmp.v:5071-5072`) and gates even
+*searching* for the indirect entry (`mmq_tlb_ctl.v:1603, 1641, 1679, 1717, 1750`).
+`nonspec` does **not** mean "committed" — it means *"this request belongs to the instruction
+currently next-to-complete in its thread"*, i.e. the oldest un-completed instruction
+(`lq_derat.v:4628-4632`, `ex3_cp_next_tid` compared against `cp_next_itag_q`). A speculative
+ERAT miss probes the TLB and is then **silently dropped**; the load recirculates and
+re-requests once it becomes oldest.
+
+What a speculative walk would cost, and why the gate exists: TLB/ERAT pollution and LRU
+corruption; spurious `mm_xu_lrat_miss` / `mm_xu_pt_fault` (`mmq.v:224, 226`); machine checks
+from walking a garbage PDE into a nonexistent real address; a Spectre-class timing footprint;
+and — new to radix — **R/C bit writes, which are architecturally visible and cannot be
+undone**.
+
+**Rule 2 — walks are not abortable; they are made *harmless*.**
+Three interlocking legs:
+
+1. the per-slot **reservation bit** (`tagpos_wq` repurposed, `mmq_htw.v:786-793`, 11 clear
+   conditions documented at `:933-957`),
+2. the **`wq == 2'b10` gate** on the TLB write (`mmq_tlb_ctl.v:2980, 2985, 2990, 2995`),
+3. the **never-recycled EMQ entry** (`lq_derat.v:4503-4512`).
+
+A stale reload still returns; it just writes nothing. A multi-level walker that lengthens
+the vulnerable window by ~100× must either strengthen all three legs or add real abort
+capability.
+
+### 5.2 P0 — blockers that change the `mmq_rtw.v` design
+
+**P0-1 — The flush window is ~5 cycles; a radix walk is ~100× longer.**
+
+`tlb_ctl_tag{1,2,3,4}_flush_sig` are **hard-wired to zero for the `derat`, `ierat`, `snoop`
+and `ptereload` tag types** (`mmq_tlb_ctl.v:2332-2342`); only `tlbre`/`tlbwe`/`tlbsx`/
+`tlbsrx` are flushable. The RTL states it outright at `mmq_tlb_ctl.v:2057`:
+*"tag0 (ex2) tlbre,tlbwe (flushable), or ptereload (not flushable)"*. Consequently
+`tlb_seq_abort` (`:1376-1378`) **can never fire for a walk**. The flush accumulation chain is
+only 5 latches deep (`:926-971`), so the window closes ~5 cycles after the op enters the MMU
+— a single-load walk is over before the chain even fills.
+
+→ **Mitigation.** Add a per-slot `killed` bit in `mmq_rtw`, set from `xu_ex5_flush`
+(`mmq.v:199`) matched against the slot's `thdid`. Test it **at every level boundary**: if
+set, retire the slot without issuing level N+1, without writing the TLB, and without raising
+an exception — but still return `mm_xu_derat_rel_*` (P0-3). **Never kill mid-load**: the L2
+reload still arrives tagged `01100`/`01101` and must be drained.
+
+**P0-2 — R/C writeback would be an uncommitted, architecturally-visible memory write.**
+
+`WAIT_UPDATES` (`mmu_a2o.vh:52`, logic `mmq_spr.v:1420-1497`) states the design intent
+plainly: *no architected state may be updated until `cp_mm_except_taken` confirms the
+interrupt was actually taken*. Six per-thread pending flags hold MAS1/MAS2, LPER/LPERU and
+MMUCR1 updates, released only by a **type-matched** exception-taken code
+(`cp_mm_except_taken_t0[0:5]`, `mmq.v:268-277`) and cleared on `cp_flush_p1`
+(`mmq_spr.v:1439, 1444, 1449, 1454, 1459, 1464`).
+
+That machinery covers **SPR latches only**. There is no "pending memory write" path anywhere
+in `mmq_*`, and the MMU→LSU port is load-only — `lq_imq.v:107` decodes ttype as
+{TLBIVAX, TLBI_COMPLETE, LOAD, LOAD}.
+
+→ **Mitigation: do not set R/C in hardware.** Take a fault and let software set them. This
+is what Microwatt does too (`mmu.vhdl` has no write path at all; `loadstore1.vhdl:1237-1253`
+re-issues the walk on a perm/RC error in case the PTE was updated), and it matches A2O's
+existing answer of folding R/C into the permission bits at reload
+(`mmq_tlb_cmp.v:3576-3581`). **This is a P0 constraint, not a preference:** "oldest in
+thread" is not "committed", so even a `nonspec` request can be flushed by an older machine
+check or asynchronous interrupt.
+
+**P0-3 — The EMQ entry is held for the entire walk; there are 4, one reserved.**
+
+An LSU ERAT-Miss-Queue entry leaves `EMQ_RPEN` only on reload, block, or POR
+(`lq_derat.v:4503-4512`). A `cp_flush` sets `kill`/`mkill` but does **not** deallocate
+(`:4550-4554`) — which is precisely what makes the stale-reload case safe. Entry 0 is
+reserved for the oldest itag (`:4536-4541`); that is the **only** anti-starvation guarantee
+anywhere in the stack.
+
+→ **Mitigation — a hard requirement on `mmq_rtw.v`:** return `mm_xu_derat_rel_val` plus the
+saved `itag` and `emq` on **every** termination path — success, page fault, badtree,
+segerror, permission fault, flush-kill, ECC UE, invalidate-kill, watchdog timeout. Any path
+that silently drops a request permanently leaks an EMQ entry and hangs that thread. The
+existing HTW has this property on its UE path (`mmq_htw.v:645-660`) and its invalidate-kill
+path (`mmq_tlb_cmp.v:4139-4141`) — preserve it.
+
+**P0-4 — The invalidate reservation tracks only the *leaf* VA; a radix walk touches 4-5
+different memory locations.**
+
+A2O's reservation compare is a single `(lpid, pid, gs, as, sized-EPN)` match
+(`htw_resvN_tag3_*_match`, `mmq_htw.v:1096-1160`). A `tlbie`/`tlbivax` arriving mid-walk may
+invalidate a **directory** level whose contents were already consumed — the leaf-VA compare
+will never see it. Note also that snoops beat ptereload in `TlbSeq_Idle` priority
+(`mmq_tlb_ctl.v:1429-1436`), so the ordering is right but the *coverage* is not.
+
+→ **Mitigation.** Keep A2O's scheme and widen it conservatively: clear the reservation on
+**any** matching invalidate for the slot's `(lpid, pid, gs, as)` **regardless of EPN**,
+because you cannot know which level was hit. This is exactly the semantics `term4`
+(tlbilx T=0) already implements at `mmq_htw.v:963`. Additionally clear on RIC=2/3-style
+process-table / partition-table invalidates, which have no A2O equivalent and must be added
+(see `docs/MMU_tlb_comparisons.md` for the RIC/PRS decode). Preserve the ptereload holdoff
+(`mmq_htw.v:1401-1403`) and the `wq==2'b10` write gate as the last line of defence. Redoing
+a walk after an invalidate is correct and rare — **do not optimise it**.
+
+**P0-5 — One LSU credit token and a 2-deep queue serialise 4-5 dependent loads.**
+
+`lsu_tokens_q` is initialised to 1 (`mmq_inval.v:1598-1616`), and that single port is shared
+by **three** consumers: page-table loads, `tlbivax` broadcasts, and `tlbsync` completes.
+`MMQ_ENTRIES` is 2 (`a2o/rel/src/verilog/trilib/tri_a2o.vh:126`), matching the two PTE score
+machines. The token is returned at **L2-send**, not data-return (`lq_imq.v:483-484`).
+
+→ **Mitigation.** Each level must re-enter the `inv_seq` arbiter (`InvSeq_Stg31`,
+`mmq_inval.v:1395-1403`). **Critically:** `mmq_inval` contains six deliberate *"service the
+HTW load or we deadlock"* detours — `:1015, 1030, 1100, 1130, 1321, 1332` — each carrying an
+explicit "could hang waiting on empty, so service it" comment. These are the only intentional
+deadlock breakers in the whole MMU. With 4-5× more request events they will be exercised far
+harder and **must be re-verified, not assumed**. The token counter already supports up to 3
+(*"this logic provides for expansion >1"*, `:1598`); raising it and `MMQ_ENTRIES` is the
+obvious relief valve.
+
+### 5.3 P1 / P2 — design for these, lower blast radius
+
+| # | Hazard | Evidence | Mitigation |
+|---|---|---|---|
+| **P1-6** | `nonspec` is sampled **once**, at handoff. "Was oldest 300 cycles ago" ≠ "is oldest now". | `mmq_tlb_cmp.v:5071-5072` | Re-evaluate at each level boundary; fold into P0-1's `killed` bit. **Never widen** the gate to hide latency. |
+| **P1-7** | **No timeout anywhere in `mmq_*`.** Slot valid clears only on `pteN_reload_req_taken`. If L2 never responds: `htw_quiesce` never asserts, the EMQ entry never frees, the thread hangs forever. Every wait loop is unbounded. | `mmq_htw.v:555-560, 770-773`; `mmq_inval.v:690-694`; `mmq.v:262-266` | Per-slot watchdog forcing a terminal state (return `derat_rel` + machine-check) after N cycles. 4-5× more round trips = 4-5× more hang opportunities. |
+| **P1-8** | ECC-UE livelock, amplified. The retry is one-shot and *passive* — it waits for L2 to re-send the line, does not re-issue. A persistent UE loops forever: UE → reservation cleared → ptereload discarded → load restarts → same UE. No counter, no escalation. | `mmq_htw.v:607-684, 798`; `mmq_tlb_ctl.v:2980` | Count retries per slot; escalate to `mm_xu_tlb_par_err` (`mmq.v:234`) on the 2nd or 3rd failure. |
+| **P1-9** | **No store-queue coherence.** The walk bypasses the D-cache, LSQ and store queue entirely (`lq_imq.v` → `lq_arb.v:681`) and sees only L2 state. `xu_mm_lmq_stq_empty` is used **only** by the invalidate sequencer, never by the walk path. | `mmq.v:192-193`; `mmq_inval.v:1032, 1113-1122` | Document the architected requirement: store PTE → `msync` → walk. **Do not** gate `rtw_lsu_req_valid` on `stq_empty` without extending the P0-5 deadlock detours — it will deadlock against the invalidate sequencer. |
+| **P2-10** | Thread starvation. 4 HTW slots are allocated round-robin **thread-agnostically** (`htw_inptr_q`); 2 PTE machines, 1 `TlbSeq`, 1 token, all shared. One thread can hold everything for thousands of cycles. | `mmq_htw.v:1288-1302, 562-569`; `mmq_tlb_ctl.v:1427`; `mmq_tlb_req.v:1079-1122` | Reserve one slot and one PTE machine per thread, mirroring the LSU's "entry 0 for the oldest itag" rule. |
+| **P2-11** | **Walk addresses derived from guest-writable memory are never validated.** In A2O every walk address comes from a hypervisor-installed indirect entry — trusted by construction. In radix, levels 2..N addresses come *out of memory*. There is no LRAT check on the walk address and no bounds check against 42 bits. | `mmq_htw.v:826-832`; `mmq.v:285`; `mmq_tlb_cmp.v:4399-4407` (LRAT checked on the **result** only) | In guest mode (`gs==1`), each level's real address must go through `mmq_tlb_lrat.v` **before** the load is issued, raising `lrat_miss` on failure; reuse the `lrat_tag4_hit_status == 4'b1100` gate. Bounds-check against `` `REAL_ADDR_WIDTH ``. **This is a security requirement, not an optimisation.** |
+| **P2-12** | Infinite walk-relaunch risk. `tagpos_ind` is forced to 0 on the ptereload pass, with the comment *"prevents htw re-request, ptereload is always ind=0 entry"*. | `mmq_tlb_ctl.v:2628-2646` | If a page-walk cache is added later and the walker can return a *directory* entry, this guard must be extended or `tlb_htw_req_valid` (`mmq_tlb_cmp.v:5071`) relaunches forever. |
+| **P2-13** | Load-bearing invariant with no assertion: the ptereload ERAT-reload arm ignores `tag4_flush`, unlike the two arms above it. Safe today **only** because the LSU never recycles an EMQ entry while `EMQ_RPEN`. | `mmq_tlb_cmp.v:4133, 4141, 4540`; `lq_derat.v:4503` | Assert `eratm_entry_state_q[emq] == EMQ_RPEN` whenever `eratm_tlb_rel_val[emq]`. Keep the contract explicit rather than emergent. |
+
+### 5.4 Summary — the two sentences to keep in mind
+
+1. **Never leave the core on behalf of a speculative request, and never update architected
+   state until the completion unit says the exception was taken.**
+2. **Walks are not abortable — they are made harmless.** The reservation bit, the
+   `wq==2'b10` TLB-write gate, and the never-recycled EMQ entry are the three legs of that
+   stool. Lengthening the walk by 100× means strengthening all three.
+
+---
+
+## 6. Verification
+
+No simulation flow exists in this repo today — `a2o/rel/build/` is Vivado synthesis TCL only.
 This has to be built as part of the work.
 
 1. **Lint first.**
-   `verilator --lint-only -Irel/src/verilog/trilib -Irel/src/verilog/work rel/src/verilog/work/mmq.v`
+   `verilator --lint-only -Ia2o/rel/src/verilog/trilib -Ia2o/rel/src/verilog/work a2o/rel/src/verilog/work/mmq.v`
    This catches the two classic A2O hazards from §4.3: missing sensitivity-list entries and
    missing default assignments, both of which produce silent sim/synth divergence.
 2. **Unit bench for `mmq_rtw.v`.** Drive `tlb_rtw_req_*` directly; model the L2 with a
    behavioural memory returning `an_ac_reld_*` quadword beats. Port the tree layout from
-   `microwatt/tests/mmu/mmu.c:125-138` (RTS=8 → 512 GB, RPDS=9). Cases:
+   `microwatt/reference/mmu_test/mmu.c:125-138` (RTS=8 → 512 GB, RPDS=9). Cases:
    - 1 / 2 / 3 / 4-level hits
    - V=0 → page fault
    - NLS < 5, NLS > 16, NLS > shift → badtree
@@ -505,31 +813,75 @@ This has to be built as part of the work.
    - R/C fail, and confirm perm takes precedence over rc
    - 4 K / 64 K / 2 M / 1 G leaf page sizes
    - bus error on the process-table read and on a PDE read → badtree
-3. **Cross-check against Microwatt.** Run the identical tree through Microwatt's own
-   `mmu_tb` / `make tests` in `microwatt/` and compare the final RPN and fault code. This is
-   the highest-value check available — the reference implementation is in the same repo.
+3. **Cross-check against Microwatt.** There is **no `mmu_tb`** in Microwatt — the MMU test
+   is *software*: `microwatt/reference/mmu_test/mmu.c` built and run on the core via
+   `core_tb`. Build the same page table in both benches and compare the final RPN and fault
+   code. This is the highest-value check available: the reference implementation is in this
+   repo, and the two walkers should agree bit-for-bit on every case in item 2.
 4. **Integration in `mmq`.** With `MMUCR1[RXE]=0`, `tlbwe` an IND=1 entry and confirm
    `mmq_htw` still walks correctly (Book-E regression). Then set `RXE=1` and confirm radix.
    Confirm `rtw_quiesce` holds the ERAT stall for the full walk duration.
 5. **SPR regression.** Read/write PTCR at 464 and confirm the value round-trips and that
    `done` asserts (i.e. the `spr_match_any_mmu` OR-tree was updated). Confirm DVC1/DVC2 at
    318/319, LPIDR at 338, PID at 48, and all MAS registers read back unchanged.
-6. **Synthesis check.** `rel/build/tcl/create_ip_a2o_core.tcl`. Confirm the new module adds
+6. **Out-of-order cases — these are the ones that will actually break** (all from §5):
+   - **Flush mid-walk at every level.** Assert `xu_ex5_flush` for the walking thread while
+     level 1, 2, 3 and 4 are outstanding. Expect: no TLB write, no exception, the L2 reload
+     still drained, and exactly one `mm_xu_derat_rel_val` returned (P0-1, P0-3).
+   - **EMQ-entry leak check.** Instrument the bench to assert that **every** accepted
+     request produces exactly one `derat_rel` — across success, every fault type,
+     flush-kill, ECC UE, invalidate-kill and watchdog. A leak here hangs the thread and is
+     the highest-severity failure mode in the design (P0-3).
+   - **`tlbivax` mid-walk hitting a directory level**, not the leaf VA. Expect the
+     reservation to clear and the ptereload to be discarded by the `wq==2'b10` gate; the
+     load then restarts and re-walks against post-invalidate state (P0-4).
+   - **Watchdog fires** when the modelled L2 never responds; expect a terminal state and a
+     returned `derat_rel`, not a hang (P1-7).
+   - **ECC UE escalation** — repeat a UE on the same line and confirm it escalates to
+     `mm_xu_tlb_par_err` rather than livelocking (P1-8).
+   - **Two-thread fairness.** Both threads walking concurrently; confirm neither starves on
+     HTW slots, PTE machines, or the LSU token (P0-5, P2-10).
+   - **Guest-mode LRAT check per level.** A corrupted PDE pointing outside the LRAT mapping
+     must raise `lrat_miss`, not issue an L2 request to an arbitrary real address (P2-11).
+   - **Invalidate-vs-walk deadlock.** Drive `tlbivax`/`tlbsync` concurrently with a 4-level
+     walk and confirm the `mmq_inval` detour states still break the deadlock (P0-5).
+7. **`mmq_rtw.v` unit tests — written and passing.** `a2o/rel/src/verilog/sim/`:
+   - `run_rtw_tests.sh` — lint + both benches.
+   - `tb_math.v` — the ported bit manipulation (barrel shifter, index mask, final mask,
+     segment mask) against a direct little-endian model of the `mmu.vhdl` source it was
+     transcribed from. 400 random vectors, all four generators match bit-for-bit.
+     **This caught a real bug:** the shifter input is `addr(61:12)`, so EA63:62 must not be
+     visible; the first version padded with 32 zeros instead of masking them off and
+     diverged from Microwatt for every shift ≥ 35.
+   - `tb_walk.v` — end-to-end walks against a behavioural L2 and a real radix tree in
+     memory (RTS=17, RPDS=9 → a genuine 4-level tree). Covers: cold walk (6 loads: PATE1 +
+     PRTE0 + 4 levels, correct RPN/usxwr/size), warm walk (4 loads, proving the root cache
+     works), V=0 → page fault, R=0 → rc_error, NLS=2 → badtree, quadrant 1 → segerror,
+     **flush mid-walk** (P0-1/P0-3: reload still returned with V=0, EMQ freed), and
+     **invalidate mid-walk** (P0-4: walk discarded, reload still returned).
+     **This caught a second real bug:** the kill/reservation test initially gated only the
+     *request* states, so a flush or invalidate arriving during the final `ReadWait`
+     completed the walk anyway. It now gates the exit from every wait state.
+8. **Synthesis check.** `a2o/rel/build/tcl/create_ip_a2o_core.tcl`. Confirm the new module adds
    no unintended latches and does not create a critical path through `tlb_seq_q`.
 
 ---
 
-## 6. Deliverables and order
+## 7. Deliverables and order
 
-1. Unified repo — `a2o/`, `microwatt/`, `docs/`, plus the §1 cleanups. **One branch, one
-   reviewable commit.**
-2. This `PLAN.md`.
+1. ~~Unified repo — `a2o/`, `microwatt/`, `docs/`, plus the §1 cleanups.~~ **DONE** (§1),
+   including the `a2o/golden/` snapshot and `tools/a2o-diff.sh`.
+2. ~~This `PLAN.md`.~~ **DONE.**
 3. SPR additions (§3.5) — small and independently testable; do these before the walker so
    PTCR is readable/writable while the walker is being brought up.
-4. `mmq_rtw.v` and the §4.7 file modifications.
+4. ~~`mmq_rtw.v`~~ **DONE** — the walker module is written, lints clean and passes its unit
+   tests (see §6.7). The §4.7 modifications to the *surrounding* files (`mmq.v` instantiation
+   and mux, `mmq_tlb_ctl.v` states, `mmq_tlb_cmp.v` handoff, `mmq_spr.v` PTCR) are still to do.
 5. Verification infrastructure (§5).
 
-**Order:** Phase 1 (repo) → PLAN.md → SPR additions → walker → verification.
+**Order:** ~~Phase 1 (repo)~~ **done** → ~~PLAN.md~~ **done** → SPR additions → walker →
+verification. Read **§5 before writing any FSM code**: the five P0 items are mandatory
+changes to §4, not refinements.
 
 ### Known deferred items
 
@@ -542,3 +894,13 @@ This has to be built as part of the work.
   Microwatt's partition table is vestigial; A2O's LRAT provides the equivalent one-level
   relocation and can be left in place.
 - **Trace array not ported** — remains a Microwatt-side debug aid.
+- **No store-queue interlock** (§5 P1-9). The walk bypasses the D-cache, LSQ and store
+  queue and sees only L2. Software must use the architected sequence: store PTE → `msync` →
+  walk. Adding a hardware interlock means extending the P0-5 deadlock detours.
+- **No per-thread resource reservation** (§5 P2-10). Slots, PTE machines, the `TlbSeq` and
+  the LSU token are all shared thread-agnostically.
+- **PWC deferred** — and if one is added later, §5 P2-12 applies: the `tagpos_ind` forcing
+  at `mmq_tlb_ctl.v:2628-2646` must be extended, or a returned directory entry relaunches
+  the walk forever.
+- **No IAMR/AMR key protection** — absent from both cores by design (§3.7), so nothing to
+  port.

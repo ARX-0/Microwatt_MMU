@@ -12,14 +12,18 @@ present/absent/port analysis, and the `mmq_rtw.v` design.
 ```
 Microwatt_MMU/
 ├── PLAN.md                     the port plan: MMU comparison, SPR map, mmq_rtw.v design
+├── tools/a2o-diff.sh           diff the editable A2O tree against pristine upstream
 ├── a2o/                        IBM A2O core (Verilog) — the port target
-│   ├── rel/
+│   ├── rel/                        EDITABLE — all porting work happens here
 │   │   ├── src/verilog/work/       the core; MMU is mmq*.v, header mmu_a2o.vh
 │   │   ├── src/verilog/trilib/     tri_* latch/primitive library
 │   │   ├── src/vhdl/               AXI wrappers, debug, scom
 │   │   ├── build/                  Vivado IP + block-design TCL
 │   │   ├── fpga/                   FPGA build scripts
 │   │   └── doc/                    A2O_UM.pdf, PowerISA_V2.07B.pdf
+│   ├── golden/                     PRISTINE upstream snapshot of rel/src/ — never edited
+│   │   └── src/                        308 files, byte-identical to the release
+│   ├── GOLDEN.md                   the golden-tree rule and how to diff
 │   ├── CONTRIBUTING.md
 │   └── LICENSE
 ├── microwatt/                  Microwatt core (VHDL) — the reference implementation
@@ -38,6 +42,20 @@ Microwatt_MMU/
     ├── mmu.vhdl.snapshot           stale older copy of Microwatt mmu.vhdl, kept for diffing
     ├── images/                     FSM and address-shifter diagrams
     └── doc_copare/                 Power ISA and A2O reference PDFs
+```
+
+### Golden / editable split
+
+`a2o/rel/` is the working tree; `a2o/golden/src/` is a byte-identical snapshot of it as
+released upstream. `tools/a2o-diff.sh` answers *"what has changed since upstream"* no matter
+how many commits have landed — the question that matters when a port touches a few places
+inside several 4000-line Verilog files. See [a2o/GOLDEN.md](a2o/GOLDEN.md).
+
+```bash
+tools/a2o-diff.sh                  # summary of changed files
+tools/a2o-diff.sh --stat           # per-file line counts
+tools/a2o-diff.sh mmq_tlb_ctl.v    # unified diff of one file
+tools/a2o-diff.sh --patch          # whole-tree unified diff
 ```
 
 ### Provenance
