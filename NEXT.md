@@ -1,7 +1,10 @@
 # NEXT.md — resume here
 
-Last session ended with **`mmq_rtw.v` written, linting clean, and passing its unit tests**.
-The walker module is done; **integrating it into the surrounding files is not**.
+**Integration is now done.** `mmq_rtw.v` is written, instantiated, muxed, and the whole
+`mmq` hierarchy lints with the *same* error count as pristine upstream (3, all pre-existing
+missing-Xilinx-primitive errors). Both unit-test benches pass.
+
+What is left is **verification against the rest of the core**, not wiring.
 
 Read [PLAN.md](PLAN.md) §4 (design), §5 (out-of-order constraints — the five P0 items are
 mandatory) and §6 (verification) before touching anything.
@@ -17,9 +20,13 @@ Both should be green. Current diff vs upstream:
 
 | File | State |
 |---|---|
-| `a2o/rel/src/verilog/work/mmq_rtw.v` | **NEW** — the radix walker, 1900 lines, done |
-| `a2o/rel/src/verilog/work/mmu_a2o.vh` | modified — added the `radixpos_*` field defines |
-| `a2o/rel/src/verilog/sim/` | **NEW** — `tb_math.v`, `tb_walk.v`, `run_rtw_tests.sh` |
+| `work/mmq_rtw.v` | **NEW** — the radix walker, ~1950 lines |
+| `work/mmu_a2o.vh` | `radixpos_*` field defines |
+| `work/mmq.v` | instantiates `mmq_rtw`; muxes LSU + ptereload on the enable; ANDs quiesce |
+| `work/mmq_tlb_cmp.v` | `tlb_rtw_req_valid` handoff; suppresses the TLB-miss exception when radix is on |
+| `work/mmq_spr.v` | PTCR (464); `ptcr_wr`/`pid_wr` strobes; `tlb0cfg_radix` boot bit |
+| `work/xu_spr_cspr.v` | PTCR decode + slowspr/illegal/hypervisor OR-trees |
+| `sim/` | **NEW** — `tb_math.v`, `tb_walk.v`, `run_rtw_tests.sh` |
 
 Nothing is committed yet. Untracked: `a2o/GOLDEN.md`, `a2o/golden/`, `tools/`,
 `a2o/rel/src/verilog/sim/`, `mmq_rtw.v`. Modified: `PLAN.md`, `README.md`, `mmu_a2o.vh`.
@@ -41,27 +48,44 @@ Nothing is committed yet. Untracked: `a2o/GOLDEN.md`, `a2o/golden/`, `tools/`,
 - P1-7 per-slot watchdog, P1-8 bounded ECC retry then escalate, P2-11 guest-mode LRAT gate
   and 42-bit RA bounds check.
 
-## TODO — integration (PLAN.md §4.7)
+## Design decisions made during integration
 
-1. **`mmq.v`** — instantiate `mmq_rtw` in the `generate if (EXPAND_TLB_TYPE > 0)` block
-   (opens `:2685`, `mmq_htw` is at `:3681`). Mux `htw_lsu_*` vs `rtw_lsu_*` and
-   `ptereload_req_*` on `MMUCR1[RXE]`; route `an_ac_reld_*` (`:3745-3752`) to both.
-   Wire `rtw_quiesce` into the `mm_xu_quiesce` AND-tree alongside `htw_quiesce`.
-2. **`mmq_tlb_cmp.v`** — add the `tlb_rtw_req_valid` handoff beside `:5071-5089`, gated on
-   `MMUCR1[RXE]` (and *not* on `tagpos_ind`, since radix has no indirect entry).
-3. **`mmq_tlb_ctl.v`** — the ptereload path already exists and `mmq_rtw` emits a standard
-   A2O `ptepos_*` PTE, so this may need **nothing**. Verify first; only add
-   `TlbSeq_Radix*` states if a real gap shows up. Free encodings: `6'b100001`–`6'b111111`.
-4. **`mmq_spr.v`** — `Spr_Addr_PTCR = 10'b0111010000` (464) near `:333-366`, add to the
-   `spr_match_any_mmu` OR-tree (`:1198-1214`) or `done` never asserts, register update
-   (`:1281-1420`), read mux (`:2053-2073`). Drive `ptcr`/`ptcr_wr`/`pid_wr` into `mmq_rtw`.
-5. **`xu_spr_cspr.v`** — `ex2_ptcr_rdec`/`_wdec`/`_re`/`_we` in the `:1767-1842` /
-   `:1885-2060` tables + hypervisor privilege qualification at `:2213-2650`.
-6. **`mmq_inval.v`** — P0-5. The six deadlock detours (`:1015, 1030, 1100, 1130, 1321, 1332`)
+- **Radix enable is `TLB0CFG[44]`**, a boot-config latch, *not* an MMUCR1 bit as PLAN.md §3.6
+  suggested. MMUCR1 is fully assigned (23:31 is the hardware-written EEN status field) and
+  MMUCR2[0:11] is the act_override distribution — neither has a free bit. TLB0CFG[44] is
+  reserved, sits next to the existing PT/IND/GTWE boot bits, and is the exact analogue of
+  `tlb0cfg_ind` which already gates the E.PT walker. Reset value 0, so an unmodified A2O
+  still boots Book-E.
+- **The radix handoff triggers on a TLB *miss*, not a hit.** `tlb_htw_req_valid` requires
+  `tagpos_ind==1` (an indirect-entry hit); radix has no indirect entry, so
+  `tlb_rtw_req_valid` mirrors `tlb_miss_d` instead — endflag, no way hit, no parity error,
+  and `nonspec`. `tlb_miss_d` itself is gated off when radix is enabled, or every walk would
+  also raise a spurious TLB-miss interrupt.
+- **`mmq_rtw`'s two scan chains are stitched into one** external bit: `func_scan_in_int` is
+  `[0:9]` and `mmq_htw` already takes 7:8, leaving only bit 9.
+- `htw_quiesce_sig` is the **AND** of both walkers' quiesce — a thread is idle only when
+  neither holds a request.
+
+## TODO — remaining (PLAN.md §4.7 / §6)
+
+1. **Exception routing — the one functional gap.** `rtw_pt_fault` / `badtree` / `segerror` /
+   `perm_err` / `rc_err` / `lrat_miss` / `mchk` are wired to `rtw_*_sig` in `mmq.v` but those
+   nets are **not yet ORed onto the `mm_xu_*` outputs** (`mmq.v:219-236`) or onto the ESR
+   bits. Until this is done a radix fault returns a V=0 reload (so the thread makes forward
+   progress and no EMQ entry leaks) but raises no interrupt. Do this next.
+2. **`mmq_inval.v`** — P0-5. The six deadlock detours (`:1015, 1030, 1100, 1130, 1321, 1332`)
    get exercised 4-5× harder; re-verify. Consider raising the token count (`:1598-1616`
    already supports 3) and `MMQ_ENTRIES` (`trilib/tri_a2o.vh:126`).
-7. Route `rtw_pt_fault`/`badtree`/`segerror`/`perm_err`/`rc_err`/`lrat_miss`/`mchk` onto the
-   existing `mm_xu_*` exception outputs (`mmq.v:219-236`) and the ESR bits.
+3. **LRAT wiring (P2-11).** `rtw_lrat_req_valid`/`_addr`/`_lpid` are left unconnected and
+   `rtw_lrat_hit` is tied to 1, so guest-mode walks are currently *not* validated. Connect
+   these to `mmq_tlb_lrat` before trusting guest mode.
+4. **Invalidate match is conservative.** `inv_seq_inprogress`/`inv_all` are both driven from
+   `tlb_seq_snoop_inprogress`, so *any* snoop kills *every* in-flight walk. Correct but
+   blunt; narrow it once the interface to `mmq_inval`'s decode is settled.
+5. **`mmq_tlb_ctl.v`** — needed **nothing**, as predicted: `mmq_rtw` emits a standard A2O
+   `ptepos_*` PTE so the existing ptereload path carries it unchanged.
+6. Integration tests from PLAN.md §6.4-§6.6: Book-E regression with `TLB0CFG[44]=0`, radix
+   with it set, and the PTCR SPR round-trip.
 
 ## Known gaps / decisions already made
 
