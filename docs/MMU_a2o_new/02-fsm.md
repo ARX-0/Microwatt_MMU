@@ -42,20 +42,30 @@ Two properties of the encoding are deliberate and follow A2O house style:
 
 ## 2.2 State table
 
-| State | Encoding | Purpose | Exits to |
-|---|---|---|---|
-| `Idle` | `0000` | Wait for a handoff; decide how much of the tree is already cached | `PartRd` / `ProcRd` / `SegChk` |
-| `PartRd` | `0001` | Request the partition-table entry at `(PTCR & ~0xFFF) + 8` | `PartWait`, `Killed`, `Timeout` |
-| `PartWait` | `0011` | Await PATE1; cache it; extract PRTS | `ProcRd`, `Fault`, `Killed`, `Timeout` |
-| `ProcRd` | `0010` | Request the process-table entry, indexed by PID | `ProcWait`, `Killed`, `Timeout` |
-| `ProcWait` | `0110` | Await PRTE0; cache it; extract RTS | `SegChk`, `Fault`, `Killed`, `Timeout` |
-| `SegChk` | `0111` | Validate quadrant, address range and tree sanity | `Lookup`, `Fault` |
-| `Lookup` | `0101` | Request one page-directory entry | `ReadWait`, `Killed`, `Fault`, `Timeout` |
-| `ReadWait` | `0100` | Decode the entry: leaf, descend, or fault | `Reload`, `Lookup`, `Fault`, `Killed`, `Timeout` |
-| `Reload` | `1100` | **Terminal, success.** Present the translation | `Idle` |
-| `Fault` | `1101` | **Terminal, architected fault.** Present V=0 | `Idle` |
-| `Killed` | `1111` | **Terminal, flushed or invalidated.** Present V=0 | `Idle` |
-| `Timeout` | `1110` | **Terminal, watchdog.** Present V=0, machine check | `Idle` |
+> **Reference convention, used in the tables and diagrams below.** A bare number is a line
+> in `mmq_rtw.v`. A reference of the form `file,line` names a different file — so
+> `mmu.vhdl,1667` is the Microwatt original.
+
+| State | Enc | Arm | Microwatt origin | Purpose | Exits to |
+|---|---|---|---|---|---|
+| `Idle` | `0000` | 958 | `mmu.vhdl,1505` | Wait for a handoff; decide how much of the tree is already cached | `PartRd` / `ProcRd` / `SegChk` |
+| `PartRd` | `0001` | 986 | `mmu.vhdl,1576` | Request the partition-table entry at `(PTCR & ~0xFFF) + 8` | `PartWait`, `Killed`, `Timeout` |
+| `PartWait` | `0011` | 1001 | `mmu.vhdl,1581` | Await PATE1; cache it; extract PRTS | `ProcRd`, `Fault`, `Killed`, `Timeout` |
+| `ProcRd` | `0010` | 1043 | `mmu.vhdl,1641` | Request the process-table entry, indexed by PID | `ProcWait`, `Killed`, `Timeout` |
+| `ProcWait` | `0110` | 1058 | `mmu.vhdl,1646` | Await PRTE0; cache it; extract RTS | `SegChk`, `Fault`, `Killed`, `Timeout` |
+| `SegChk` | `0111` | 1099 | `mmu.vhdl,1667` | Validate quadrant, address range and tree sanity | `Lookup`, `Fault` |
+| `Lookup` | `0101` | 1128 | `mmu.vhdl,1687` | Request one page-directory entry | `ReadWait`, `Killed`, `Fault`, `Timeout` |
+| `ReadWait` | `0100` | 1158 | `mmu.vhdl,1691` | Decode the entry: leaf, descend, or fault | `Reload`, `Lookup`, `Fault`, `Killed`, `Timeout` |
+| `Reload` | `1100` | 1230 | `mmu.vhdl,1749` | **Terminal, success.** Present the translation | `Idle` |
+| `Fault` | `1101` | 1242 | `mmu.vhdl,1753` | **Terminal, architected fault.** Present V=0 | `Idle` |
+| `Killed` | `1111` | 1254 | **A2O-only** | **Terminal, flushed or invalidated.** Present V=0 | `Idle` |
+| `Timeout` | `1110` | 1266 | **A2O-only** | **Terminal, watchdog.** Present V=0, machine check | `Idle` |
+
+The last two rows are the interesting ones. Ten of the twelve states are transcribed from
+Microwatt; `Killed` and `Timeout` have no counterpart there and exist solely because A2O is
+out-of-order — see [05-ooo-safety](05-ooo-safety.md). Microwatt's `TLBWAIT` and `DO_TLBIE`
+were deliberately **not** ported: A2O's own TLB sequencer and invalidate sequencer already
+cover arbitration and invalidation.
 
 All four terminal states drive the same output handshake. That is not redundancy — it is the
 single most important safety property in the module, and is explained in
@@ -63,56 +73,89 @@ single most important safety property in the module, and is explained in
 
 ## 2.3 State diagram
 
+The machine is drawn as two diagrams. Splitting it is not a presentation convenience: drawn
+as one graph the sixteen abort and return edges — every active state to `Killed` and to
+`Timeout`, every terminal back to `Idle` — cross the twelve edges that actually advance a
+walk, and bury them. Those sixteen carry one bit of information between them (*every* active
+state aborts identically), so collapsing them loses nothing and makes both halves legible.
+
+### Diagram A — the nominal walk
+
+Only the transitions that advance a walk. No faults, no aborts, no ECC retries.
+
 ```mermaid
 stateDiagram-v2
     direction TB
 
+    Idle : Idle<br/>0000 · 958
+    PartRd : PartRd<br/>0001 · 986<br/>mmu.vhdl,1576
+    PartWait : PartWait<br/>0011 · 1001<br/>mmu.vhdl,1581
+    ProcRd : ProcRd<br/>0010 · 1043<br/>mmu.vhdl,1641
+    ProcWait : ProcWait<br/>0110 · 1058<br/>mmu.vhdl,1646
+    SegChk : SegChk<br/>0111 · 1099<br/>mmu.vhdl,1667
+    Lookup : Lookup<br/>0101 · 1128<br/>mmu.vhdl,1687
+    ReadWait : ReadWait<br/>0100 · 1158<br/>mmu.vhdl,1691
+    Reload : Reload<br/>1100 · 1230<br/>mmu.vhdl,1749
+
     [*] --> Idle
-
-    Idle --> PartRd   : handoff, no cached<br/>partition entry
-    Idle --> ProcRd   : partition entry cached,<br/>root not cached
-    Idle --> SegChk   : both roots cached<br/>(warm walk)
-
-    PartRd   --> PartWait : load granted
-    PartWait --> ProcRd   : PATE1 returned,<br/>cache it, shift = PRTS
-
-    ProcRd   --> ProcWait : load granted
-    ProcWait --> SegChk   : PRTE0 returned,<br/>cache it, shift = RTS
-
-    SegChk --> Lookup : tree valid
-
-    Lookup   --> ReadWait : load granted
-    ReadWait --> Lookup   : directory entry,<br/>shift -= NLS
-    ReadWait --> Reload   : leaf entry, R and C set
-
-    Reload  --> Idle
-    Fault   --> Idle
-    Killed  --> Idle
-    Timeout --> Idle
-
-    SegChk   --> Fault : RPDS=0 / quadrant / range / badtree
-    ReadWait --> Fault : V=0 / badtree / R or C clear
-    Lookup   --> Fault : RA overflow / guest LRAT miss
-
-    PartRd   --> Killed : flushed or invalidated
-    ProcRd   --> Killed : flushed or invalidated
-    Lookup   --> Killed : flushed or invalidated
-    PartWait --> Killed : flushed or invalidated
-    ProcWait --> Killed : flushed or invalidated
-    ReadWait --> Killed : flushed or invalidated
-
-    PartRd   --> Timeout : watchdog
-    ProcRd   --> Timeout : watchdog
-    Lookup   --> Timeout : watchdog
-    PartWait --> Timeout : watchdog
-    ProcWait --> Timeout : watchdog
-    ReadWait --> Timeout : watchdog
-
-    note right of Reload
-        All four terminal states drive
-        ptereload_req_* -- see 2.6
-    end note
+    Idle --> PartRd : cold walk<br/>no cached roots · 966
+    PartRd --> PartWait : load granted · 998
+    PartWait --> ProcRd : PATE1 in<br/>shift = PRTS · 1038
+    Idle --> ProcRd : partition entry cached<br/>root not cached · 974
+    ProcRd --> ProcWait : load granted · 1055
+    ProcWait --> SegChk : PRTE0 in<br/>shift = RTS · 1094
+    Idle --> SegChk : warm walk<br/>both roots cached · 981
+    SegChk --> Lookup : tree valid<br/>shift = RTS+19-RPDS · 1124
+    Lookup --> ReadWait : load granted · 1155
+    ReadWait --> Lookup : directory entry<br/>shift -= NLS · 1222
+    ReadWait --> Reload : leaf entry<br/>R and C set · 1204
+    Reload --> Idle : reload taken · 1238
 ```
+
+### Diagram B — exits and the common handshake
+
+Every state that can terminate a walk does so through the same output handshake, so the
+seven active states are drawn as one node. Each edge label lists every line at which that
+transition is taken, so aggregating the arrows loses no line reference.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    Active : Any active state<br/>PartRd PartWait ProcRd ProcWait<br/>SegChk Lookup ReadWait
+    Reload2 : Reload<br/>1100 · 1230
+    Fault : Fault<br/>1101 · 1242
+    Killed : Killed<br/>1111 · 1254<br/>A2O-only
+    Timeout : Timeout<br/>1110 · 1266<br/>A2O-only
+    Shake : ptereload_req_* driven · 627<br/>frees the LSU miss-queue entry
+    Idle2 : Idle<br/>0000 · 958
+
+    Active --> Reload2 : leaf found<br/>R and C set · 1204
+    Active --> Fault : architected fault · 1109 1115<br/>1121 1149 1194 1201 1215<br/>error recovery · 1021 1031<br/>1078 1088 1142 1179 1189
+    Active --> Killed : flush or invalidate<br/>988 1016 1045<br/>1073 1133 1173
+    Active --> Timeout : watchdog<br/>992 1005 1049<br/>1062 1137 1162
+    Reload2 --> Shake : install V=1
+    Fault --> Shake : install V=0
+    Killed --> Shake : install V=0
+    Timeout --> Shake : install V=0<br/>+ machine check
+    Shake --> Idle2 : reload taken<br/>1238 1250 1262 1274
+```
+
+`Shake` is not a state — it is the shared output behaviour of the four terminal states,
+drawn explicitly because it is the property that stops the load/store unit's miss queue from
+leaking. See [§2.6](#26-why-every-exit-goes-through-the-same-handshake).
+
+Three things the split makes visible that the single diagram did not:
+
+- **`Fault` has fourteen entry points**, and only half are architected page-table faults
+  (invalid entry, segment error, bad tree, LRAT miss). The other seven are error recovery —
+  uncorrectable ECC on a table read, an exhausted retry budget, or a real address beyond the
+  42 bits A2O can drive.
+- **`Killed` and `Timeout` are reachable from six states each, but never from `SegChk`.**
+  `SegChk` issues no memory request and completes in a single cycle, so there is nothing to
+  abort and no stall for the watchdog to observe.
+- **All four terminals converge before returning to `Idle`.** In the original diagram this
+  was four separate long back-edges and read as an artefact of drawing; here it is the point.
 
 ## 2.4 Flow of events: a cold four-level walk
 
@@ -121,41 +164,41 @@ Six memory accesses: partition table, process table, then four tree levels.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant LSU as Load/Store Unit
+    participant LSU as Load/Store Unit<br/>lq_derat.v
     participant CMP as mmq_tlb_cmp
     participant RTW as mmq_rtw
-    participant ARB as LSU arbiter<br/>(mmq_inval)
+    participant ARB as LSU arbiter<br/>mmq_inval
     participant L2
 
     LSU->>CMP: D-ERAT miss, nonspec set
     Note over CMP: all page-size probes miss,<br/>endflag set, no way hit
-    CMP->>RTW: tlb_rtw_req_valid + tag + way
+    CMP->>RTW: tlb_rtw_req_valid + tag + way<br/>mmq_tlb_cmp.v,5092
 
-    Note over RTW: Idle: no cached roots<br/>latch tag, resv=1, valid=1
+    Note over RTW: Idle 958: no cached roots<br/>latch tag, resv=1, valid=1
 
-    RTW->>ARB: load (PTCR & ~0xFFF) + 8
+    RTW->>ARB: load (PTCR & ~0xFFF) + 8<br/>809
     ARB->>L2: core tag 01100
     L2-->>RTW: PATE1
-    Note over RTW: PartWait: cache PATE1,<br/>shift = PRTS
+    Note over RTW: PartWait 1001: cache PATE1,<br/>shift = PRTS
 
-    RTW->>ARB: load process-table entry (PID-indexed)
+    RTW->>ARB: load process-table entry<br/>PID-indexed · 811
     ARB->>L2: core tag 01100
     L2-->>RTW: PRTE0
-    Note over RTW: ProcWait: cache root,<br/>shift = RTS
+    Note over RTW: ProcWait 1058: cache root,<br/>shift = RTS
 
-    Note over RTW: SegChk: quadrant, EA range,<br/>5 ≤ RPDS ≤ 16<br/>shift = RTS + 19 − RPDS
+    Note over RTW: SegChk 1099: quadrant, EA range,<br/>5 <= RPDS <= 16<br/>shift = RTS + 19 - RPDS
 
     loop 4 tree levels
-        Note over RTW: Lookup: re-test kill<br/>and reservation
-        RTW->>ARB: load PDE at pgbase | (index << 3)
+        Note over RTW: Lookup 1128: re-test kill<br/>and reservation
+        RTW->>ARB: load PDE at<br/>pgbase OR (index << 3) · 815
         ARB->>L2: core tag 01100
         L2-->>RTW: page-directory entry
-        Note over RTW: ReadWait: V? leaf?<br/>descend: shift −= NLS
+        Note over RTW: ReadWait 1158: V? leaf?<br/>descend: shift -= NLS · 1222
     end
 
-    Note over RTW: leaf found, R and C set<br/>assemble 64-bit A2O PTE
-    RTW->>CMP: ptereload_req_valid + tag + pte
-    Note over CMP: PTE → 168-bit way,<br/>TLB write, ERAT reload
+    Note over RTW: leaf found, R and C set · 868<br/>assemble 64-bit A2O PTE · 874
+    RTW->>CMP: ptereload_req_valid + tag + pte<br/>627
+    Note over CMP: PTE to 168-bit way,<br/>TLB write, ERAT reload
     CMP-->>LSU: derat_rel + itag + emq
 ```
 
