@@ -3201,6 +3201,38 @@ assign mm_xu_ord_write_done = mm_xu_ord_write_done_sig[0:`THREADS - 1];
          // TLB Compare Logic Component Instantiation
          //---------------------------------------------------------------------
 
+
+      //---------------------------------------------------------------------
+      // Exception merge: Book-E (mmq_tlb_cmp) OR radix (mmq_rtw)
+      //---------------------------------------------------------------------
+      // A2O's Book-E exception set has no encodings for the radix-specific causes
+      // Microwatt distinguishes via DSISR bits 44/45 (badtree / RC).  They are all
+      // storage interrupts, so segerror, badtree, perm and rc collapse onto
+      // pt_fault -- the architected "page table fault" -- while lrat_miss maps
+      // exactly and the walker's machine checks join tlb_par_err.  Collapsing is
+      // safe: software re-reads the PTE and re-walks either way.  Preserving the
+      // distinct cause would need new MESR1 bits (PLAN.md 3.6).
+      wire [0:`MM_THREADS-1] cmpx_pt_fault_sig, cmpx_lrat_miss_sig, cmpx_tlb_par_err_sig;
+      wire [0:`MM_THREADS-1] cmpx_esr_pt_sig, cmpx_esr_data_sig;
+      wire                   cmpx_pt_fault_ored_sig, cmpx_lrat_miss_ored_sig;
+      wire [0:`MM_THREADS-1] rtw_storage_fault;
+
+      assign rtw_storage_fault = rtw_pt_fault_sig | rtw_badtree_sig | rtw_segerror_sig |
+                                 rtw_perm_err_sig | rtw_rc_err_sig;
+
+      assign mm_xu_pt_fault_sig    = cmpx_pt_fault_sig    | rtw_storage_fault;
+      assign mm_xu_lrat_miss_sig   = cmpx_lrat_miss_sig   | rtw_lrat_miss_sig;
+      assign mm_xu_tlb_par_err_sig = cmpx_tlb_par_err_sig | rtw_mchk_sig;
+      // ESR[PT] marks it as a page-table fault; ESR[DATA] is set for the D side.
+      // The walker's tag carries the request type, but by the time the fault is
+      // reported the context is retiring, so ESR[DATA] is driven for any radix
+      // storage fault -- an I-side fault reports through the same ISI path.
+      assign mm_xu_esr_pt_sig      = cmpx_esr_pt_sig      | rtw_storage_fault | rtw_lrat_miss_sig;
+      assign mm_xu_esr_data_sig    = cmpx_esr_data_sig    | rtw_storage_fault;
+
+      assign mm_xu_pt_fault_ored_sig  = cmpx_pt_fault_ored_sig  | (|rtw_storage_fault);
+      assign mm_xu_lrat_miss_ored_sig = cmpx_lrat_miss_ored_sig | (|rtw_lrat_miss_sig);
+
          mmq_tlb_cmp #(.MMQ_TLB_CMP_CSWITCH_0TO7(MMQ_TLB_CMP_CSWITCH_0TO7)) mmq_tlb_cmp(
             .vdd(vdd),
             .gnd(gnd),
@@ -3445,12 +3477,12 @@ assign mm_xu_ord_write_done = mm_xu_ord_write_done_sig[0:`THREADS - 1];
             .mm_xu_tlb_miss(mm_xu_tlb_miss_sig),
             .mm_xu_tlb_inelig(mm_xu_tlb_inelig_sig),
 
-            .mm_xu_lrat_miss(mm_xu_lrat_miss_sig),
-            .mm_xu_pt_fault(mm_xu_pt_fault_sig),
+            .mm_xu_lrat_miss(cmpx_lrat_miss_sig),
+            .mm_xu_pt_fault(cmpx_pt_fault_sig),
             .mm_xu_hv_priv(mm_xu_hv_priv_sig),
 
-            .mm_xu_esr_pt(mm_xu_esr_pt_sig),
-            .mm_xu_esr_data(mm_xu_esr_data_sig),
+            .mm_xu_esr_pt(cmpx_esr_pt_sig),
+            .mm_xu_esr_data(cmpx_esr_data_sig),
             .mm_xu_esr_epid(mm_xu_esr_epid_sig),
             .mm_xu_esr_st(mm_xu_esr_st_sig),
 
@@ -3458,7 +3490,7 @@ assign mm_xu_ord_write_done = mm_xu_ord_write_done_sig[0:`THREADS - 1];
             .mm_xu_cr0_eq_valid(mm_xu_cr0_eq_valid_sig),
 
             .mm_xu_tlb_multihit_err(mm_xu_tlb_multihit_err_sig),
-            .mm_xu_tlb_par_err(mm_xu_tlb_par_err_sig),
+            .mm_xu_tlb_par_err(cmpx_tlb_par_err_sig),
             .mm_xu_lru_par_err(mm_xu_lru_par_err_sig),
 
             .mm_xu_ord_tlb_multihit(mm_xu_ord_tlb_multihit_sig),
@@ -3466,9 +3498,9 @@ assign mm_xu_ord_write_done = mm_xu_ord_write_done_sig[0:`THREADS - 1];
             .mm_xu_ord_lru_par_err(mm_xu_ord_lru_par_err_sig),
 
             .mm_xu_tlb_miss_ored(mm_xu_tlb_miss_ored_sig),
-            .mm_xu_lrat_miss_ored(mm_xu_lrat_miss_ored_sig),
+            .mm_xu_lrat_miss_ored(cmpx_lrat_miss_ored_sig),
             .mm_xu_tlb_inelig_ored(mm_xu_tlb_inelig_ored_sig),
-            .mm_xu_pt_fault_ored(mm_xu_pt_fault_ored_sig),
+            .mm_xu_pt_fault_ored(cmpx_pt_fault_ored_sig),
             .mm_xu_hv_priv_ored(mm_xu_hv_priv_ored_sig),
             .mm_xu_cr0_eq_ored(mm_xu_cr0_eq_ored_sig),
             .mm_xu_cr0_eq_valid_ored(mm_xu_cr0_eq_valid_ored_sig),
@@ -3900,10 +3932,16 @@ assign mm_xu_ord_write_done = mm_xu_ord_write_done_sig[0:`THREADS - 1];
             .rtw_lsu_u(rtwx_lsu_u),
             .rtw_lsu_addr(rtwx_lsu_addr),
             .rtw_lsu_req_taken(htw_lsu_req_taken),
+            // P2-11.  mmq_tlb_lrat is a PIPELINED lookup driven from tlb_tag0_*, not a
+            // standalone request port, so a per-level walker check needs a second
+            // compare port rather than a wire.  Until that exists, guest-mode radix
+            // walks are refused outright (hit tied low -> Flt_LratMiss) instead of
+            // proceeding with addresses read out of guest-writable memory.  Radix in
+            // hypervisor state (gs=0) is unaffected and fully functional.
             .rtw_lrat_req_valid(),
             .rtw_lrat_addr(),
             .rtw_lrat_lpid(),
-            .rtw_lrat_hit(1'b1),
+            .rtw_lrat_hit(1'b0),
             .rtw_quiesce(rtwx_quiesce),
             .ptereload_req_valid(rtwx_ptereload_req_valid),
             .ptereload_req_tag(rtwx_ptereload_req_tag),

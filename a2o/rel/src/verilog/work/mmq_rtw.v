@@ -378,6 +378,7 @@ module mmq_rtw(
       wire                                   ctx_inv_match     [0:`RTW_NUM_CTX-1];
       wire                                   ctx_reld_for_me_tp2 [0:`RTW_NUM_CTX-1];
       wire                                   ctx_wd_expired    [0:`RTW_NUM_CTX-1];
+      wire                                   ctx_wd_run        [0:`RTW_NUM_CTX-1];
       wire [0:`THDID_WIDTH-1]                ctx_thdid         [0:`RTW_NUM_CTX-1];
       reg                                    ctx_wr_prtbl      [0:`RTW_NUM_CTX-1];
       reg                                    ctx_wr_pgtbl      [0:`RTW_NUM_CTX-1];
@@ -985,6 +986,11 @@ module mmq_rtw(
                RtwSeq_PartRd :
                   if (ctx_kill_now[i] | ctx_killed_q[i] | (~ctx_resv_q[i]))
                      ctx_seq_d[i] = RtwSeq_Killed;
+                  else if (ctx_wd_expired[i] == 1'b1)
+                  begin
+                     ctx_fault_d[i] = Flt_Mchk;
+                     ctx_seq_d[i]   = RtwSeq_Timeout;
+                  end
                   else
                   begin
                      ctx_seq_load_req[i] = 1'b1;
@@ -1037,6 +1043,11 @@ module mmq_rtw(
                RtwSeq_ProcRd :
                   if (ctx_kill_now[i] | ctx_killed_q[i] | (~ctx_resv_q[i]))
                      ctx_seq_d[i] = RtwSeq_Killed;
+                  else if (ctx_wd_expired[i] == 1'b1)
+                  begin
+                     ctx_fault_d[i] = Flt_Mchk;
+                     ctx_seq_d[i]   = RtwSeq_Timeout;
+                  end
                   else
                   begin
                      ctx_seq_load_req[i] = 1'b1;
@@ -1120,6 +1131,11 @@ module mmq_rtw(
                   // re-evaluated by the hardware, so the walker does it here.
                   if (ctx_kill_now[i] | ctx_killed_q[i] | (~ctx_resv_q[i]))
                      ctx_seq_d[i] = RtwSeq_Killed;
+                  else if (ctx_wd_expired[i] == 1'b1)
+                  begin
+                     ctx_fault_d[i] = Flt_Mchk;
+                     ctx_seq_d[i]   = RtwSeq_Timeout;
+                  end
                   else if (ra_overflow == 1'b1)
                   begin
                      ctx_fault_d[i] = Flt_Mchk;
@@ -1298,10 +1314,19 @@ module mmq_rtw(
          assign ctx_tag_d[i] = (accept) ? tlb_rtw_req_tag : ctx_tag_q[i];
          assign ctx_way_d[i] = (accept) ? tlb_rtw_req_way : ctx_way_q[i];
 
-         // P1-7: watchdog. Nothing else in mmq_* has a timeout; if the L2 never
-         // answers, the slot never frees, quiesce never asserts and the thread
-         // hangs. Runs only while a load is outstanding.
-         assign ctx_wd_d[i] = (ctx_pending_q[i] == 1'b0) ? {`RTW_WD_WIDTH{1'b0}} :
+         // P1-7: watchdog. Nothing else in mmq_* has a timeout; if a walk stalls the
+         // slot never frees, quiesce never asserts and the thread hangs forever.
+         // It measures TIME SINCE LAST PROGRESS, not time since the load was issued:
+         // a request that is never granted by the LSU arbiter stalls just as hard as
+         // one whose data never returns, and an earlier version that counted only
+         // while a load was outstanding missed the former entirely.
+         // Terminal states are excluded -- they are waiting on ptereload_req_taken,
+         // and tripping there would only swap one wait for an identical one.
+         assign ctx_wd_run[i] = ctx_valid_q[i] &
+                                (ctx_seq_q[i] != RtwSeq_Reload) & (ctx_seq_q[i] != RtwSeq_Fault) &
+                                (ctx_seq_q[i] != RtwSeq_Killed) & (ctx_seq_q[i] != RtwSeq_Timeout);
+         assign ctx_wd_d[i] = (ctx_wd_run[i] == 1'b0) ? {`RTW_WD_WIDTH{1'b0}} :
+                              (ctx_seq_q[i] != ctx_seq_din[i]) ? {`RTW_WD_WIDTH{1'b0}} :
                               (ctx_wd_expired[i] == 1'b1) ? ctx_wd_q[i] :
                               (ctx_wd_q[i] + 1'b1);
 

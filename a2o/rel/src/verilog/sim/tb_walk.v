@@ -50,6 +50,7 @@ module tb_walk;
 
    // ---------------- DUT wiring ----------------
    reg         rxe = 1'b1;
+   reg         lrat_hit = 1'b1;
    reg         req_valid = 0;
    reg  [0:`TLB_TAG_WIDTH-1] req_tag;
    reg  [`TLB_WORD_WIDTH:`TLB_WAY_WIDTH-1] req_way = 0;
@@ -91,7 +92,7 @@ module tb_walk;
       .ptcr(ptcr_r), .ptcr_wr(1'b0), .pid_wr(1'b0),
       .rtw_lsu_req_valid(lsu_req_valid), .rtw_lsu_thdid(lsu_thdid), .rtw_lsu_ttype(lsu_ttype),
       .rtw_lsu_wimge(), .rtw_lsu_u(), .rtw_lsu_addr(lsu_addr), .rtw_lsu_req_taken(lsu_taken),
-      .rtw_lrat_req_valid(), .rtw_lrat_addr(), .rtw_lrat_lpid(), .rtw_lrat_hit(1'b1),
+      .rtw_lrat_req_valid(), .rtw_lrat_addr(), .rtw_lrat_lpid(), .rtw_lrat_hit(lrat_hit),
       .rtw_quiesce(quiesce),
       .ptereload_req_valid(pte_valid), .ptereload_req_tag(pte_tag),
       .ptereload_req_pte(pte_out), .ptereload_req_taken(pte_taken),
@@ -114,6 +115,7 @@ module tb_walk;
    reg [41:0] pend_addr;
    reg [0:1]  pend_ttype;
    reg        pend = 0;
+   reg        l2_stall = 0;
 
    // Single always block: driving reld_vld from two blocks on the same edge is a
    // race and Icarus resolves it inconsistently (that is what made load 2 vanish).
@@ -121,7 +123,7 @@ module tb_walk;
       lsu_taken <= 1'b0;
       reld_vld  <= 1'b0;
       reld_crit <= 1'b0;
-      if (lsu_req_valid && !lsu_taken && !pend) begin
+      if (lsu_req_valid && !lsu_taken && !pend && !l2_stall) begin
          lsu_taken  <= 1'b1;
          last_addr  <= lsu_addr;
          pend_addr  <= lsu_addr;
@@ -341,6 +343,74 @@ module tb_walk;
          finish_walk; #50;
       end
 
+
+      // ---- test 9: radix disabled -- the walker must be completely inert ----
+      begin : t9
+         integer to;
+         rxe = 1'b0;
+         nloads = 0;
+         build_tag(ea_epn, 1'b0, 1'b0);
+         @(negedge clk); req_valid = 1'b1;
+         @(negedge clk); req_valid = 1'b0;
+         to = 0;
+         while (!pte_valid && to < 200) begin @(negedge clk); to = to + 1; end
+         if (pte_valid || nloads != 0) begin
+            $display("  FAIL radix disabled: walker active (pte_valid=%b loads=%0d)", pte_valid, nloads);
+            errors = errors + 1;
+         end else
+            $display("  radix disabled: no loads, no reload -- Book-E path unaffected");
+         checks = checks + 1;
+         rxe = 1'b1;
+         #50;
+      end
+
+      // ---- test 10 (P2-11): guest-mode walk refused when the LRAT says no ----
+      begin : t10
+         integer to;
+         lrat_hit = 1'b0;
+         build_tag(ea_epn, 1'b1, 1'b0);        // gs = 1
+         @(negedge clk); req_valid = 1'b1;
+         @(negedge clk); req_valid = 1'b0;
+         to = 0;
+         while (!pte_valid && to < 2000) begin @(negedge clk); to = to + 1; end
+         if (!pte_valid) begin
+            $display("  FAIL guest-mode refusal: no ptereload -> EMQ LEAK"); errors = errors + 1;
+         end else if (f_lrat[0] !== 1'b1) begin
+            $display("  FAIL guest-mode refusal: lrat_miss not raised (got %b)", f_lrat);
+            errors = errors + 1;
+         end else if (pte_out[`ptepos_valid] !== 1'b0) begin
+            $display("  FAIL guest-mode refusal: installed an unvalidated translation");
+            errors = errors + 1;
+         end else
+            $display("  guest-mode walk refused with lrat_miss, nothing installed (P2-11 OK)");
+         checks = checks + 1;
+         finish_walk;
+         lrat_hit = 1'b1;
+         #50;
+      end
+
+      // ---- test 11 (P1-7): watchdog -- L2 never answers ----
+      begin : t11
+         integer to;
+         build_tag(ea_epn, 1'b0, 1'b0);
+         @(negedge clk); req_valid = 1'b1;
+         @(negedge clk); req_valid = 1'b0;
+         l2_stall = 1'b1;                      // swallow the request, never reply
+         to = 0;
+         while (!pte_valid && to < 20000) begin @(negedge clk); to = to + 1; end
+         if (!pte_valid) begin
+            $display("  FAIL watchdog: still hung after %0d cycles -> thread would never quiesce", to);
+            errors = errors + 1;
+         end else if (f_mchk[0] !== 1'b1) begin
+            $display("  FAIL watchdog: fired but no machine check (got %b)", f_mchk);
+            errors = errors + 1;
+         end else
+            $display("  watchdog fired after %0d cycles, mchk raised, EMQ freed (P1-7 OK)", to);
+         checks = checks + 1;
+         finish_walk;
+         l2_stall = 1'b0;
+         #50;
+      end
 
       $display("");
       if (errors == 0) $display("PASS: %0d walk scenarios, no failures", checks);

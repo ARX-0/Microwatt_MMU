@@ -1,10 +1,11 @@
 # NEXT.md — resume here
 
-**Integration is now done.** `mmq_rtw.v` is written, instantiated, muxed, and the whole
-`mmq` hierarchy lints with the *same* error count as pristine upstream (3, all pre-existing
-missing-Xilinx-primitive errors). Both unit-test benches pass.
+**Integration and exception routing are done.** `mmq_rtw.v` is written, instantiated, muxed,
+and its faults reach the architected `mm_xu_*` outputs. The whole `mmq` hierarchy lints with
+the *same* error count as pristine upstream (3, all pre-existing missing-Xilinx-primitive
+errors). 11 walk scenarios + the bit-math bench pass.
 
-What is left is **verification against the rest of the core**, not wiring.
+What is left is **whole-core simulation** and the LRAT second port — not wiring.
 
 Read [PLAN.md](PLAN.md) §4 (design), §5 (out-of-order constraints — the five P0 items are
 mandatory) and §6 (verification) before touching anything.
@@ -26,10 +27,10 @@ Both should be green. Current diff vs upstream:
 | `work/mmq_tlb_cmp.v` | `tlb_rtw_req_valid` handoff; suppresses the TLB-miss exception when radix is on |
 | `work/mmq_spr.v` | PTCR (464); `ptcr_wr`/`pid_wr` strobes; `tlb0cfg_radix` boot bit |
 | `work/xu_spr_cspr.v` | PTCR decode + slowspr/illegal/hypervisor OR-trees |
+| `work/mmq.v` | also merges radix faults onto `mm_xu_pt_fault` / `_lrat_miss` / `_tlb_par_err` / ESR |
 | `sim/` | **NEW** — `tb_math.v`, `tb_walk.v`, `run_rtw_tests.sh` |
 
-Nothing is committed yet. Untracked: `a2o/GOLDEN.md`, `a2o/golden/`, `tools/`,
-`a2o/rel/src/verilog/sim/`, `mmq_rtw.v`. Modified: `PLAN.md`, `README.md`, `mmu_a2o.vh`.
+All committed; working tree clean.
 
 ## What `mmq_rtw.v` already does
 
@@ -66,34 +67,47 @@ Nothing is committed yet. Untracked: `a2o/GOLDEN.md`, `a2o/golden/`, `tools/`,
 - `htw_quiesce_sig` is the **AND** of both walkers' quiesce — a thread is idle only when
   neither holds a request.
 
-## TODO — remaining (PLAN.md §4.7 / §6)
+## Exception mapping (done)
 
-1. **Exception routing — the one functional gap.** `rtw_pt_fault` / `badtree` / `segerror` /
-   `perm_err` / `rc_err` / `lrat_miss` / `mchk` are wired to `rtw_*_sig` in `mmq.v` but those
-   nets are **not yet ORed onto the `mm_xu_*` outputs** (`mmq.v:219-236`) or onto the ESR
-   bits. Until this is done a radix fault returns a V=0 reload (so the thread makes forward
-   progress and no EMQ entry leaks) but raises no interrupt. Do this next.
+A2O's Book-E exception set has no encodings for the radix-specific causes Microwatt reports
+via DSISR bits 44/45. They are all storage interrupts, so:
+
+| radix fault | A2O output |
+|---|---|
+| invalid (V=0), badtree, segerror, perm, rc | `mm_xu_pt_fault` + `ESR[PT]` + `ESR[DATA]` |
+| lrat_miss | `mm_xu_lrat_miss` + `ESR[PT]` |
+| mchk (watchdog / UE escalation / RA overflow) | `mm_xu_tlb_par_err` |
+
+Collapsing is safe — software re-reads the PTE and re-walks either way. Preserving the
+distinct cause would need new MESR1 bits (PLAN.md §3.6).
+
+## TODO — remaining
+
+1. **LRAT second port (P2-11).** `mmq_tlb_lrat` is a *pipelined* lookup driven from
+   `tlb_tag0_*`, not a standalone request port, so a per-level walker check needs a second
+   compare port rather than a wire. Until then `rtw_lrat_hit` is tied **low** in `mmq.v`, so
+   **guest-mode radix walks are refused outright** (`lrat_miss`) instead of proceeding with
+   addresses read out of guest-writable memory. Radix in hypervisor state (gs=0) is
+   unaffected and fully functional. This is the last real feature gap.
 2. **`mmq_inval.v`** — P0-5. The six deadlock detours (`:1015, 1030, 1100, 1130, 1321, 1332`)
    get exercised 4-5× harder; re-verify. Consider raising the token count (`:1598-1616`
    already supports 3) and `MMQ_ENTRIES` (`trilib/tri_a2o.vh:126`).
-3. **LRAT wiring (P2-11).** `rtw_lrat_req_valid`/`_addr`/`_lpid` are left unconnected and
-   `rtw_lrat_hit` is tied to 1, so guest-mode walks are currently *not* validated. Connect
-   these to `mmq_tlb_lrat` before trusting guest mode.
-4. **Invalidate match is conservative.** `inv_seq_inprogress`/`inv_all` are both driven from
+3. **Invalidate match is conservative.** `inv_seq_inprogress`/`inv_all` are both driven from
    `tlb_seq_snoop_inprogress`, so *any* snoop kills *every* in-flight walk. Correct but
    blunt; narrow it once the interface to `mmq_inval`'s decode is settled.
+4. **Whole-core simulation.** Everything so far is `mmq_rtw` in isolation. A full `mmq` or
+   core-level bench needs the Xilinx RAMB16 primitives that make `mmq.v` unlintable
+   standalone (3 pre-existing errors, same as upstream). PLAN.md §6.4-§6.6.
 5. **`mmq_tlb_ctl.v`** — needed **nothing**, as predicted: `mmq_rtw` emits a standard A2O
    `ptepos_*` PTE so the existing ptereload path carries it unchanged.
-6. Integration tests from PLAN.md §6.4-§6.6: Book-E regression with `TLB0CFG[44]=0`, radix
-   with it set, and the PTCR SPR round-trip.
 
 ## Known gaps / decisions already made
 
 - **Leaf sizes are demoted** (2M→1M, 1G→16M). Not a shortcut: A2O's size code is
   log4(size/1KB) so 2M has no encoding, and `mmq_tlb_cmp.v:3486` keeps only 3 size bits so
   nothing above 16M survives the ptereload path. See PLAN.md §2.3 item 5.
-- **Watchdog is untested in simulation** — it needs a 4096-cycle stall. Either shrink
-  `` `RTW_WD_WIDTH `` for a test build or add a force-based test.
+- ~~Watchdog untested~~ — now covered: `tb_walk` test 11 stalls the L2 model and the
+  watchdog trips at 4097 cycles with a machine check and a freed EMQ entry.
 - **Two contexts, not four.** `mmq_htw` has 4 slots because a slot parks between its single
   load; a radix context is continuously active and there are only 2 core tags, so 2 is the
   real concurrency limit.
@@ -107,3 +121,7 @@ Nothing is committed yet. Untracked: `a2o/GOLDEN.md`, `a2o/golden/`, `tools/`,
    zeros instead of 34 diverged from Microwatt for every shift ≥ 35.
 2. Kill/reservation must gate the exit from **wait** states too, not just the request states,
    or a flush landing during the final `ReadWait` completes the walk anyway.
+3. The watchdog must measure **time since last progress**, not time since the load was
+   issued. Counting only while a load was outstanding missed the case where the LSU arbiter
+   never grants the request at all — an equally hard hang. It now also trips from the
+   request states, not just the waits.
