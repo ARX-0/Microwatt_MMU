@@ -4,8 +4,12 @@ This repo holds both cores side by side so the MMU work can reference them toget
 The goal: give the **A2O** core a Power ISA 3.1C **radix multi-level page-table walk**,
 taken from **Microwatt**'s `mmu.vhdl`.
 
-See **[PLAN.md](PLAN.md)** for the structural comparison of the two MMUs, the full SPR
-present/absent/port analysis, and the `mmq_rtw.v` design.
+**Start here: [docs/MMU_a2o_new/](docs/MMU_a2o_new/00-README.md)** — a seven-document set
+covering the radix walker: background, the state machine, the datapath, integration,
+out-of-order safety, and verification. Self-contained, with an executive summary.
+
+See **[PLAN.md](PLAN.md)** for the working plan (SPR analysis, hazard analysis, remaining
+work) and **[NEXT.md](NEXT.md)** for the resume-here notes.
 
 ## Repo structure
 
@@ -34,6 +38,7 @@ Microwatt_MMU/
 │   ├── ... 75 core .vhdl files, Makefile, microwatt.core
 │   └── reference/mmu_test/         radix tree setup reference (mmu.c)
 └── docs/                       analysis notes and diagrams
+    ├── MMU_a2o_new/                **the radix walker documentation set (start here)**
     ├── README_MMU.md               Book-E (ISA 2.07) TLB semantics study
     ├── Inteface_README.md          full mmq.v port list, grouped by interface
     ├── MMU_tlb_comparisons.md      ISA 2.07 vs 3.1C tlbie/RIC/PRS gap analysis
