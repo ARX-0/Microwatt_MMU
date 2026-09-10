@@ -159,7 +159,155 @@ Three things the split makes visible that the single diagram did not:
 
 ## 2.4 Flow of events: a cold four-level walk
 
-Six memory accesses: partition table, process table, then four tree levels.
+This section is written to be read on its own. It explains what a page-table walk *is*
+before showing what this one does, because the sequence diagram is hard to interpret without
+that background.
+
+### 2.4.1 Why a walk happens at all
+
+Programs address memory with **effective addresses** — the addresses in the instruction
+stream. The memory system needs **real addresses** — where the data physically is. The map
+between them is per-process, granular to a page (4 kB here), and far too large to hold on
+chip. So it lives in memory as a **page table**, and the hardware keeps caches of the
+entries it has used recently.
+
+A2O has two such caches, in series:
+
+| | Entries | Scope | Purpose |
+|---|---:|---|---|
+| **ERAT** (Effective-to-Real Address Translation) | 16 instruction-side, 32 data-side | per thread, adjacent to the pipeline | translate in the common case without leaving the unit |
+| **TLB** (Translation Lookaside Buffer) | 512, 4-way | shared across threads | back the ERATs; 8 page sizes |
+
+A **page-table walk** is what happens when both miss: the hardware has to go and read the map
+itself. One point that is easy to miss and worth stating plainly — **the walk reads ordinary
+memory**. The page table is just a data structure sitting at known real addresses, and the
+walker's loads travel through the normal L2 like any other load. There is no special
+"page-table memory".
+
+### 2.4.2 What "cold" means here — three levels, not one
+
+"Cold" in this document does *not* mean the data caches are cold. It means every cache of
+the **map** missed. A walk reaching `PartRd` implies all three of:
+
+| Level | What missed | Where |
+|---|---|---|
+| 1. ERAT | translation absent from the L1 translation cache | `lq_derat.v` (D-side) / `iuq_ic_ierat.v` (I-side) |
+| 2. TLB | every configured page-size probe missed; `endflag` set, no way hit | `mmq_tlb_cmp.v:5092` |
+| 3. Walker root cache | `ptb_valid` clear — the walker has no cached partition-table entry | 962, in the `Idle` arm |
+
+Only the third distinguishes a *cold* walk from the *warm* walk of [§2.5](#25-the-warm-walk).
+The first two are true of every walk, by definition — otherwise the request would have been
+satisfied without one.
+
+### 2.4.3 Why the page table is a tree
+
+The obvious data structure for a map is an array indexed by page number. Work out what that
+costs, using this port's own worked example — a 48-bit address space, which is what
+`RTS = 17` gives (address space = `RTS + 31`):
+
+- 48-bit space at 4 kB pages → 2³⁶ pages → 2³⁶ entries.
+- At 8 bytes per entry: **512 GiB of page table**. For one process.
+
+That is obviously unusable, and the reason is that address spaces are **sparse**: a process
+maps a little code, a little data, a stack, and leaves almost all of the 48 bits untouched.
+A flat array pays for the whole space; a tree pays only for the branches that exist.
+
+Radix uses a tree of page directories. Each level consumes some index bits from the
+effective address to select an entry, which points at the next level down:
+
+```
+EA[47:39]  EA[38:30]  EA[29:21]  EA[20:12]     EA[11:0]
+   9 bits     9 bits     9 bits     9 bits      12 bits
+     L1    →    L2    →    L3    →    L4     →  page offset
+```
+
+Four levels of 9 bits cover 36 bits; the remaining 12 are the offset within the page.
+36 + 12 = 48. The four levels correspond exactly to the four `Lookup`/`ReadWait` iterations
+in the diagram below, and to the shift value stepping 27 → 18 → 9 → 0
+([§2.8](#28-the-descend-decision-and-why-there-is-no-level-counter)).
+
+The detail that makes the whole design click, and the one worth having ready in conversation:
+
+> **9 index bits × 8 bytes per entry = 4096 bytes.** Each page directory is *exactly one
+> page*. The tree is built out of the same allocation unit it describes.
+
+That is not a coincidence — it is why 9 is the level width. A directory is allocated,
+mapped and freed like any other page.
+
+The cost of the tree is **depth**: what was one array lookup is now four dependent memory
+accesses. Size has been traded for pointer chasing, and §2.4.5 is about what that trade
+costs.
+
+### 2.4.4 The two indirections before the tree
+
+The walk is six loads, not four. Two of them happen before the tree is even reached:
+
+```
+PTCR (SPR 464)  →  partition table entry  →  process table entry  →  tree root
+     register            in memory                in memory
+```
+
+Neither is part of the tree. They answer the question *"where is this process's tree?"*:
+
+- The **partition table** exists for virtualisation. In a hypervisor system each partition
+  (guest) gets its own process table, so the hypervisor can give every guest an independent
+  set of address spaces.
+- The **process table** is indexed by `PID`, so each process within a partition gets its own
+  tree root. This is what makes a context switch cheap: change `PID`, and translation follows.
+
+Stated honestly, because a reviewer will ask: **in this port, and in Microwatt, the partition
+table is vestigial.** The walker reads entry 0, doubleword 1, unconditionally and ignores
+`LPID` entirely (`809`; Microwatt does the same at `mmu.vhdl,1846`). Those two loads
+currently buy generality that neither implementation uses. A2O covers partition-scope
+translation with its LRAT instead.
+
+### 2.4.5 The dependency chain — where the cost actually comes from
+
+This is the part that matters, and the count of six loads is not it.
+
+> **Level *N*'s address is computed from level *N−1*'s data.** The walker physically cannot
+> issue load *N* until load *N−1* has returned.
+
+Look at the address formation (`815`): `pgtable_addr` is built from `ctx_pgbase_q`, and
+`ctx_pgbase_q` was loaded out of the *previous* directory entry. This is **pointer chasing**,
+and it defeats every technique a modern core normally uses to hide memory latency:
+
+- **Prefetching is impossible.** A prefetcher needs an address. The address does not exist
+  until the preceding load returns.
+- **Memory-level parallelism within a walk is zero.** Six loads, six serialised round trips.
+  A core that can sustain dozens of outstanding misses gets no benefit here.
+- **Speculating past it is not allowed anyway.** The `nonspec` gate means a walk only starts
+  for the oldest un-completed instruction in its thread — see
+  [05-ooo-safety](05-ooo-safety.md). Walking speculatively would pollute the TLB and could
+  raise faults for addresses never architecturally referenced.
+- **It cannot be hidden by executing past it**, which is the usual out-of-order answer to a
+  cache miss. A data-cache miss blocks one instruction while others proceed. A *translation*
+  miss blocks the instruction that needs the translation, and there is nothing to run ahead
+  to until it resolves.
+
+On top of that algorithmic serialisation, this implementation adds a structural one: the MMU
+holds a **single LSU credit token**, shared with TLB-invalidate traffic
+([05-ooo-safety §5.3](05-ooo-safety.md)). Even if the levels were independent, they would
+still queue.
+
+**Cost model.** Roughly six × (L2 access latency + about ten cycles of local pipeline — the
+arbiter handshake plus the four-stage reload staging). No absolute cycle count is given here
+because A2O's L2 latency depends on the system it is integrated into.
+
+Two honest qualifications a reviewer will want:
+
+1. **The typical case is much better than the worst case.** Page directories are ordinary
+   cacheable memory and are shared by every process using that region, so in a running
+   system they usually hit in L2 or L3. The six round trips are six *accesses*, not six DRAM
+   trips.
+2. **A cold walk is rare by construction.** It requires an ERAT miss, a TLB miss, *and* an
+   empty root cache. Steady-state code hits in the ERAT the overwhelming majority of the
+   time. This path is the tail, and it is the tail that this section describes.
+
+### 2.4.6 The walk, step by step
+
+With that background, the sequence is readable directly. Six memory accesses: partition
+table, process table, then four tree levels.
 
 ```mermaid
 sequenceDiagram
@@ -202,8 +350,49 @@ sequenceDiagram
     CMP-->>LSU: derat_rel + itag + emq
 ```
 
-Each of the six accesses is a full L2 round trip, and the MMU holds **one** credit token
-shared with TLB invalidate traffic, so they are strictly serial. A cold walk is expensive.
+Each of the six accesses is a full L2 round trip, and because the MMU holds one credit token
+shared with TLB invalidate traffic, they are strictly serial.
+
+### 2.4.7 What a reviewer will probe
+
+Answered honestly, including where this implementation falls short.
+
+**"Why is there no page-walk cache?"**
+Microwatt has one — a 256-entry cache of *intermediate* directory entries, so a walk in a
+nearby address region can start partway down the tree. This port does not. It is the first
+optimisation to revisit, and the omission is deliberate scope control rather than an
+oversight. See [00-README](00-README.md#status-and-limitations).
+
+**"Why not use larger pages and shorten the walk?"**
+A 2 MB leaf ends the walk one level early and covers 512× the address range per TLB entry.
+Radix does produce 2 MB leaves — but A2O cannot represent that size: its size field encodes
+log₄(size/1 kB), so 2 MB has no encoding at all, and the reload datapath keeps only three of
+those bits anyway. Leaves are demoted to the largest representable sub-page. Full argument in
+[03-datapath](03-datapath.md#leaf-size-demotion).
+
+**"Can the levels be overlapped?"**
+Not within one walk — that is what §2.4.5 is about. *Across* walks, yes: the module has two
+walk contexts and A2O provides two L2 core tags, so two walks (one per thread) can be in
+flight simultaneously. That is the limit; the core tag is the only mechanism by which
+returning data identifies itself.
+
+**"Why have an ERAT at all if there is a TLB?"**
+Latency and isolation. The ERAT sits next to the pipeline and answers in the common case
+without a shared-structure access; it is also per-thread, so one thread's working set cannot
+evict another's from the fast path. The TLB is larger, shared, and backs both ERATs.
+
+**"What happens if the walk faults, or the instruction is flushed part-way through?"**
+Every termination path — success, architected fault, flush, invalidate, watchdog timeout —
+returns through the same handshake. See
+[§2.6](#26-why-every-exit-goes-through-the-same-handshake); it is the single most important
+safety property in the module.
+
+**"How does this compare with what Microwatt does?"**
+The tree walk itself is a faithful transcription — verified against a direct model of the
+Microwatt source over 400 random vectors
+([06-verification](06-verification.md#62-fidelity-tb_mathv)). What differs is everything
+around it: Microwatt is in-order and single-threaded, so it needs none of the kill,
+reservation or watchdog machinery this module carries.
 
 ## 2.5 The warm walk
 
