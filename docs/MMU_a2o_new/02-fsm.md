@@ -368,7 +368,7 @@ A 2 MB leaf ends the walk one level early and covers 512× the address range per
 Radix does produce 2 MB leaves — but A2O cannot represent that size: its size field encodes
 log₄(size/1 kB), so 2 MB has no encoding at all, and the reload datapath keeps only three of
 those bits anyway. Leaves are demoted to the largest representable sub-page. Full argument in
-[03-datapath](03-datapath.md#leaf-size-demotion).
+[03-datapath](03-datapath.md#36-leaf-size-demotion).
 
 **"Can the levels be overlapped?"**
 Not within one walk — that is what §2.4.5 is about. *Across* walks, yes: the module has two
@@ -390,7 +390,7 @@ safety property in the module.
 **"How does this compare with what Microwatt does?"**
 The tree walk itself is a faithful transcription — verified against a direct model of the
 Microwatt source over 400 random vectors
-([06-verification](06-verification.md#62-fidelity-tb_mathv)). What differs is everything
+([06-verification](06-verification.md#62-fidelity-tbmathv)). What differs is everything
 around it: Microwatt is in-order and single-threaded, so it needs none of the kill,
 reservation or watchdog machinery this module carries.
 
@@ -472,7 +472,7 @@ RtwSeq_SegChk :
 
 `ReadWait` (`mmq_rtw.v:1158`) decodes the returned doubleword. The valid bit is bit 0 in
 A2O's MSB-first numbering, the leaf bit is bit 1 (see
-[03-datapath](03-datapath.md#bit-order)).
+[03-datapath](03-datapath.md#31-bit-order)).
 
 ```verilog
 else if (pde_leaf == 1'b1)
@@ -518,7 +518,7 @@ The kill and reservation conditions are tested **both** before issuing a load an
 out of every wait state. Gating only the request states was a real bug found in testing: a
 flush arriving during the final `ReadWait` let the walk run to completion and install a
 translation it should not have. See
-[06-verification](06-verification.md#bugs-found-by-the-benches).
+[06-verification](06-verification.md#64-bugs-found-by-the-benches).
 
 ```verilog
 else if (ctx_dataval_q[i] == 1'b1)

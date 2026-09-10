@@ -43,7 +43,7 @@ same error count as pristine upstream A2O.
    power-of-four sizes exist, and the page-table-reload datapath keeps only three of those
    bits, capping the reachable size at 16 MB. Radix produces 4 K/64 K/2 M/1 G. Leaves are
    therefore installed at the largest representable sub-page size, which is always
-   architecturally safe. See [03-datapath](03-datapath.md#leaf-size-demotion).
+   architecturally safe. See [03-datapath](03-datapath.md#36-leaf-size-demotion).
 
 2. **Porting into an out-of-order core is the hard part, not the algorithm.** Microwatt
    dispatches TLB invalidations through the *same* state machine as a walk, so a walk and an
@@ -56,7 +56,7 @@ same error count as pristine upstream A2O.
    and MMU-control register blocks occupy exactly the numbers ISA 3.x assigns to its
    hypervisor registers, HEIR and PIR. None of the collisions block this port: exactly one
    new SPR number is claimed, PTCR = 464, and it is free.
-   See [04-integration](04-integration.md#spr-work).
+   See [04-integration](04-integration.md#44-spr-work).
 
 ---
 

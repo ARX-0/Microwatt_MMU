@@ -137,7 +137,7 @@ The rows in bold type are the ones that forced design decisions. Three deserve e
 - **42-bit real addresses.** Microwatt forms 56-bit page-table addresses. A tree built for a
   wider machine can point outside what A2O can address; the walker treats that as a machine
   check rather than truncating silently.
-- **No 2 MB page size.** Discussed in [03-datapath](03-datapath.md#leaf-size-demotion).
+- **No 2 MB page size.** Discussed in [03-datapath](03-datapath.md#36-leaf-size-demotion).
 - **One credit token.** The MMU may have only one request outstanding to the load/store
   unit, and that port is shared with TLB invalidate broadcasts. A four-level walk is four
   serial round trips to the L2.

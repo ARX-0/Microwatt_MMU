@@ -81,7 +81,7 @@ assign addrsh  = epn_pad[(68 - ctx_shift_q[i]) +: 16];
 **The 34 is load-bearing.** An earlier version padded with 32 zeros, which left `EPN[0:1]`
 (EA63:62) inside the window. For shifts of 35 or more those bits entered the index, and the
 result diverged from Microwatt on every such vector. The comparison bench caught it; see
-[06-verification](06-verification.md#bugs-found-by-the-benches).
+[06-verification](06-verification.md#64-bugs-found-by-the-benches).
 
 A single indexed part-select replaces Microwatt's three-stage mux. The zero padding
 guarantees the base stays in range for any 6-bit shift value, so no special cases are
