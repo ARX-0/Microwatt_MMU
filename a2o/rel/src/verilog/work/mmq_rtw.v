@@ -193,10 +193,13 @@ module mmq_rtw(
       // that is a sub-page of the real leaf.  Demotion is always architecturally
       // safe: a smaller page maps a subset of the same translation with the same
       // permissions, it just costs extra TLB misses.  See Rtw_Demote below.
-      parameter [0:3]                        TLB_PgSize_16MB = 4'b0111;
-      parameter [0:3]                        TLB_PgSize_1MB  = 4'b0101;
-      parameter [0:3]                        TLB_PgSize_64KB = 4'b0011;
-      parameter [0:3]                        TLB_PgSize_4KB  = 4'b0001;
+      // These are PTE PS codes, log2(size/1KB) -- NOT the TLB's log4 size codes.
+      // A2O UM 6.17.3: TLB SIZE = 0b0 || PTE PS[52:54], valid PS values 0b0010 (4K),
+      // 0b0110 (64K), 0b1010 (1M), 0b1110 (16M); PS bit 55 is ignored.
+      parameter [0:3]                        PTE_PS_16MB = 4'b1110;
+      parameter [0:3]                        PTE_PS_1MB  = 4'b1010;
+      parameter [0:3]                        PTE_PS_64KB = 4'b0110;
+      parameter [0:3]                        PTE_PS_4KB  = 4'b0010;
 
       // Radix shift values (log2(pagesize) - 12) for the sizes radix produces
       parameter [0:5]                        RadixShift_4KB  = 6'd0;
@@ -624,8 +627,14 @@ module mmq_rtw(
       // cleared the reservation, so the entry is presented with V=0 and the TLB
       // write is discarded downstream by the wq==2'b10 gate (mmq_tlb_ctl.v:2980).
       // The reload is still returned, which is what frees the EMQ entry.
+      // The WQ bits carry the reservation, exactly as mmq_htw.v:785-793 re-purposes
+      // them: mmq_tlb_ctl only writes a ptereload into a way when wq==2'b10
+      // (mmq_tlb_ctl.v:2983), so a walk whose reservation was cleared returns its
+      // reload but installs nothing.
+      assign ptereload_req_tag   = (reload_sel == 1'b1) ?
+                                   {ctx_tag_q[1][0:`tagpos_wq-1], ctx_resv_q[1], 1'b0, ctx_tag_q[1][`tagpos_wq+2:`TLB_TAG_WIDTH-1]} :
+                                   {ctx_tag_q[0][0:`tagpos_wq-1], ctx_resv_q[0], 1'b0, ctx_tag_q[0][`tagpos_wq+2:`TLB_TAG_WIDTH-1]};
       assign ptereload_req_valid = mmucr1_rxe & rl_sel_req;
-      assign ptereload_req_tag   = (reload_sel == 1'b1) ? ctx_tag_q[1]   : ctx_tag_q[0];
       assign ptereload_req_pte   = (reload_sel == 1'b1) ? ctx_pte_out[1] : ctx_pte_out[0];
 
       //---------------------------------------------------------------------
@@ -837,10 +846,10 @@ module mmq_rtw(
                              (ctx_shift_q[i] >= 6'd8)  ? InstShift_1MB  :
                              (ctx_shift_q[i] >= 6'd4)  ? RadixShift_64KB :
                                                          RadixShift_4KB;
-         assign inst_size  = (ctx_shift_q[i] >= 6'd12) ? TLB_PgSize_16MB :
-                             (ctx_shift_q[i] >= 6'd8)  ? TLB_PgSize_1MB  :
-                             (ctx_shift_q[i] >= 6'd4)  ? TLB_PgSize_64KB :
-                                                         TLB_PgSize_4KB;
+         assign inst_size  = (ctx_shift_q[i] >= 6'd12) ? PTE_PS_16MB :
+                             (ctx_shift_q[i] >= 6'd8)  ? PTE_PS_1MB  :
+                             (ctx_shift_q[i] >= 6'd4)  ? PTE_PS_64KB :
+                                                         PTE_PS_4KB;
 
          // RPN = (pde & ~finalmask) | (ea & finalmask)            mmu.vhdl:1831-1833
          // RA[41:12] lives at data[22:51] and at epn[22:51].

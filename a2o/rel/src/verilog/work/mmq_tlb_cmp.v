@@ -258,11 +258,12 @@ module mmq_tlb_cmp(
    output                                  tlb_htw_req_valid,
    output [0:`TLB_TAG_WIDTH-1]             tlb_htw_req_tag,
    output [`TLB_WORD_WIDTH:`TLB_WAY_WIDTH-1] tlb_htw_req_way,
-   // radix walker handoff (mmq_rtw).  Shares the tag/way payload with the Book-E
-   // handoff above but has its own valid, because the trigger condition is the
-   // opposite one -- see the comment at the tlb_rtw_req_valid assign.
+   // radix walker handoff (mmq_rtw).  Own valid, because the trigger condition is
+   // the opposite of the Book-E one, and own tag, because the Book-E tag takes
+   // fields from the way that HIT -- see the comments at the tlb_rtw_req_* assigns.
    input                                   mmucr1_rxe,
    output                                  tlb_rtw_req_valid,
+   output [0:`TLB_TAG_WIDTH-1]             tlb_rtw_req_tag,
    output                                  tlbwe_back_inv_valid,
    output [0:`MM_THREADS-1]                tlbwe_back_inv_thdid,
    output [52-`EPN_WIDTH:51]               tlbwe_back_inv_addr,
@@ -5096,6 +5097,16 @@ module mmq_tlb_cmp(
                                    |(tlb_tag4_wayhit_q[0:`TLB_WAYS - 1]) == 1'b0 &
                                    tlb_tag4_q[`tagpos_nonspec] == 1'b1 &
                                    |(tag4_parerr_q[0:4]) == 1'b0 ) ? 1'b1 : 1'b0;
+
+      // Radix request tag.  NOT tlb_htw_req_tag: that one takes PID/LPID/GS/AS and the
+      // new entry's thread mask from the IND way that HIT (lines below, htw_req_tag).
+      // A radix walk starts from a MISS, so there is no such way; every field comes
+      // from the request itself.  {atsel,esel} become the installed entry's thread
+      // mask (tlb_datain_lo_ptereload_nopar) and the ERAT reload thdid: use the
+      // requesting thread, so the entry is private to the thread that missed.
+      assign tlb_rtw_req_tag[0:`tagpos_atsel - 1] = tlb_tag4_q[0:`tagpos_atsel - 1];
+      assign tlb_rtw_req_tag[`tagpos_atsel:`tagpos_esel + 2] = tlb_tag4_q[`tagpos_thdid:`tagpos_thdid + `THDID_WIDTH - 1];
+      assign tlb_rtw_req_tag[`tagpos_hes:`TLB_TAG_WIDTH - 1] = tlb_tag4_q[`tagpos_hes:`TLB_TAG_WIDTH - 1];
 
       assign tlb_htw_req_way = tlb_tag4_way_or[`TLB_WORD_WIDTH:`TLB_WAY_WIDTH - 1];
 

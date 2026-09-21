@@ -205,6 +205,8 @@ module mmq_tlb_ctl(
    input [0:34]                   tlb_snoop_attr,
    input [52-`EPN_WIDTH:51]       tlb_snoop_vpn,
    output                         tlb_snoop_ack,
+   // radix walker (mmq_rtw) P0-4: an invalidation snoop is being processed
+   output                         tlb_ctl_snoop_inprogress,
    output [0:`TLB_ADDR_WIDTH-1]   lru_rd_addr,
    input [0:15]                   lru_tag4_dataout,
    input [0:`TLB_ADDR_WIDTH-1]    tlb_addr4,
@@ -2255,6 +2257,7 @@ module mmq_tlb_ctl(
                               snoop_val_q[0];
       assign snoop_val_d[1] = tlb_seq_snoop_done_sig;
       assign tlb_snoop_ack = snoop_val_q[1];
+      assign tlb_ctl_snoop_inprogress = tlb_seq_snoop_inprogress;
       // snoop_attr:
       //          0 -> Local
       //        1:3 -> IS/Class: 0=all, 1=tid, 2=gs, 3=epn, 4=class0, 5=class1, 6=class2, 7=class3

@@ -575,6 +575,7 @@ module mmq(
       wire [0:`TLB_TAG_WIDTH-1]             rtwx_ptereload_req_tag;
       wire [0:`PTE_WIDTH-1]                 rtwx_ptereload_req_pte;
       wire                                  tlb_rtw_req_valid;
+      wire [0:`TLB_TAG_WIDTH-1]              tlb_rtw_req_tag;
       wire                                  mmucr1_rxe;
       wire                                  tlb0cfg_radix;
       wire                                  rtw_scan_link;
@@ -632,6 +633,7 @@ module mmq(
       wire [0:34]                           tlb_snoop_attr;
       wire [52-`EPN_WIDTH:51]                tlb_snoop_vpn;
       wire                                  tlb_snoop_ack;
+      wire                                  tlb_seq_snoop_inprogress;   // mmq_tlb_ctl -> mmq_rtw (P0-4)
       wire                                  mas0_0_atsel;
       wire [0:2]                            mas0_0_esel;
       wire                                  mas0_0_hes;
@@ -3081,6 +3083,7 @@ assign mm_xu_ord_write_done = mm_xu_ord_write_done_sig[0:`THREADS - 1];
             .tlb_snoop_attr(tlb_snoop_attr),
             .tlb_snoop_vpn(tlb_snoop_vpn),
             .tlb_snoop_ack(tlb_snoop_ack),
+            .tlb_ctl_snoop_inprogress(tlb_seq_snoop_inprogress),
 
             .lru_rd_addr(lru_rd_addr),
             .lru_tag4_dataout(lru_tag4_dataout),
@@ -3460,6 +3463,9 @@ assign mm_xu_ord_write_done = mm_xu_ord_write_done_sig[0:`THREADS - 1];
             .tlb_htw_req_valid(tlb_htw_req_valid),
             .tlb_htw_req_tag(tlb_htw_req_tag),
             .tlb_htw_req_way(tlb_htw_req_way),
+            .mmucr1_rxe(mmucr1_rxe),
+            .tlb_rtw_req_valid(tlb_rtw_req_valid),
+            .tlb_rtw_req_tag(tlb_rtw_req_tag),
 
             .tlbwe_back_inv_valid(tlbwe_back_inv_valid_sig),
             .tlbwe_back_inv_thdid(tlbwe_back_inv_thdid_sig),
@@ -3903,17 +3909,19 @@ assign mm_xu_ord_write_done = mm_xu_ord_write_done_sig[0:`THREADS - 1];
             .pc_sg_2(pc_sg_2[1]),
             .pc_func_sl_thold_2(pc_func_sl_thold_2[1]),
             .pc_func_slp_sl_thold_2(pc_func_slp_sl_thold_2[1]),
-            .xu_mm_ccr2_notlb_b(xu_mm_ccr2_notlb_b),
-            .mmucr2_act_override(mmucr2_sig[0]),
-            .tlb_delayed_act(tlb_delayed_act),
+            // same slices as mmq_htw above: notlb_b[1:12] are copies of one latch,
+            // and mmq_rtw's tlb_delayed_act port is declared [24:28] to match
+            .xu_mm_ccr2_notlb_b(xu_mm_ccr2_notlb_b[7]),
+            .mmucr2_act_override(mmucr2_sig[4]),
+            .tlb_delayed_act(tlb_delayed_act[24:28]),
             .mmucr1_rxe(mmucr1_rxe),
             .tlb_rtw_req_valid(tlb_rtw_req_valid),
-            .tlb_rtw_req_tag(tlb_htw_req_tag),
+            .tlb_rtw_req_tag(tlb_rtw_req_tag),
             .tlb_rtw_req_way(tlb_htw_req_way),
-            .tlb_ctl_tag2_flush(tlb_ctl_tag2_flush),
-            .tlb_ctl_tag3_flush(tlb_ctl_tag3_flush),
-            .tlb_ctl_tag4_flush(tlb_ctl_tag4_flush),
-            .tlb_tag2(tlb_tag2),
+            .tlb_ctl_tag2_flush(tlb_ctl_tag2_flush_sig),
+            .tlb_ctl_tag3_flush(tlb_ctl_tag3_flush_sig),
+            .tlb_ctl_tag4_flush(tlb_ctl_tag4_flush_sig),
+            .tlb_tag2(tlb_tag2_sig),
             .tlb_tag5_except(tlb_tag5_except),
             .xu_ex5_flush(xu_ex5_flush_sig),
             .inv_seq_inprogress(tlb_seq_snoop_inprogress),

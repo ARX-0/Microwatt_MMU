@@ -224,8 +224,9 @@ module tb_walk;
          if (pte_out[`ptepos_valid] !== 1'b1) begin
             $display("  FAIL: install V=0, expected a successful leaf"); errors=errors+1;
          end
-         if (pte_out[`ptepos_size +: 4] !== 4'b0001) begin
-            $display("  FAIL: size=%b expected 4KB 0001", pte_out[`ptepos_size +: 4]); errors=errors+1;
+         // PTE PS is log2(size/1KB): 4KB = 0010 (A2O UM 6.17.3), not the TLB's 0001
+         if (pte_out[`ptepos_size +: 4] !== 4'b0010) begin
+            $display("  FAIL: size=%b expected 4KB PS 0010", pte_out[`ptepos_size +: 4]); errors=errors+1;
          end
          // RA[41:12] lives at ptepos_rpn+10 .. +39
          if (pte_out[(`ptepos_rpn+10) +: 30] !== TARGET_RA[41:12]) begin
