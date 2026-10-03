@@ -42,6 +42,14 @@ module tb_walk;
             mk_pte[8]=rref; mk_pte[7]=c; mk_pte[3]=priv;
             mk_pte[2]=r; mk_pte[1]=w; mk_pte[0]=x; end
    endfunction
+   // as mk_pte, plus the two ATT attribute bits (ISA v3.1C Fig. 6.17, PTE 58:59;
+   // Microwatt numbering puts ATT0 at bit 5 and ATT1 at bit 4)
+   function [63:0] mk_pte_att;
+      input [55:12] rpn; input rref; input c; input x; input w; input r; input priv;
+      input [0:1] att;
+      begin mk_pte_att = mk_pte(rpn, rref, c, x, w, r, priv);
+            mk_pte_att[5] = att[0]; mk_pte_att[4] = att[1]; end
+   endfunction
    function [63:0] mk_prte; // PRTE0: RTS split + base + RPDS
       input [55:12] base; input [5:0] rts; input [4:0] rpds;
       begin mk_prte = 64'b0; mk_prte[62:61]=rts[4:3]; mk_prte[7:5]=rts[2:0];
@@ -411,6 +419,190 @@ module tb_walk;
          finish_walk;
          l2_stall = 1'b0;
          #50;
+      end
+
+      // ---- test 12 (PROBLEMS.md item 11): RW=1, R=0 must still be readable ----
+      // ISA v3.1C Fig. 6.17: EAA1 (Read) "0 - loads permitted only if EAA2=1", and EAA2
+      // is READ/WRITE, not write-only.  usxwr = UX SX UW SW UR SR.
+      begin : t12
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte(TARGET_RA[55:12], 1'b1,1'b1, 1'b0,1'b1,1'b0, 1'b0);
+         run_walk(ea_epn, "RW=1 R=0 readable");
+         if (pte_valid) begin
+            if (pte_out[`ptepos_usxwr +: 6] !== 6'b001111) begin
+               $display("  FAIL: usxwr=%b expected 001111 (no exec, write+read allowed)",
+                        pte_out[`ptepos_usxwr +: 6]); errors=errors+1;
+            end else $display("  RW=1,R=0 page is readable: usxwr=%b", pte_out[`ptepos_usxwr +: 6]);
+         end
+         finish_walk; #50;
+      end
+
+      // ---- test 13 (PROBLEMS.md item 13G): ATT=11, tolerant I/O ----
+      // ISA v3.1C Fig. 6.17: WIMG 0110, so G=0; Fig. 6.26 rule 1 forbids ifetch only on
+      // G=1, so a tolerant-I/O page stays executable.
+      begin : t13
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte_att(TARGET_RA[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b0, 2'b11);
+         run_walk(ea_epn, "ATT=11 tolerant I/O");
+         if (pte_valid) begin
+            if (pte_out[`ptepos_wimge +: 5] !== 5'b01100) begin
+               $display("  FAIL: wimge=%b expected 01100 (I=1,M=1,G=0)",
+                        pte_out[`ptepos_wimge +: 5]); errors=errors+1;
+            end else if (pte_out[`ptepos_usxwr +: 6] !== 6'b111111) begin
+               $display("  FAIL: usxwr=%b expected 111111 (tolerant I/O is executable)",
+                        pte_out[`ptepos_usxwr +: 6]); errors=errors+1;
+            end else $display("  tolerant I/O: wimge=%b, still executable",
+                              pte_out[`ptepos_wimge +: 5]);
+         end
+         finish_walk; #50;
+      end
+
+      // ---- test 14 (PROBLEMS.md item 13G): ATT=10, non-idempotent I/O ----
+      // WIMG 0111, so G=1, and execute is denied.
+      begin : t14
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte_att(TARGET_RA[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b0, 2'b10);
+         run_walk(ea_epn, "ATT=10 non-idempotent I/O");
+         if (pte_valid) begin
+            if (pte_out[`ptepos_wimge +: 5] !== 5'b01110) begin
+               $display("  FAIL: wimge=%b expected 01110 (I=1,M=1,G=1)",
+                        pte_out[`ptepos_wimge +: 5]); errors=errors+1;
+            end else if (pte_out[`ptepos_usxwr +: 6] !== 6'b001111) begin
+               $display("  FAIL: usxwr=%b expected 001111 (guarded: no execute)",
+                        pte_out[`ptepos_usxwr +: 6]); errors=errors+1;
+            end else $display("  non-idempotent I/O: wimge=%b, execute denied",
+                              pte_out[`ptepos_wimge +: 5]);
+         end
+         finish_walk; #50;
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte(TARGET_RA[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b0);
+      end
+
+      // ---- test 15 (PROBLEMS.md item 9): leaf RPN above RA 42 -> machine check ----
+      // A2O real addresses are 42 bits. rpn_out keeps data[22:51]; a tree authored for a
+      // wider machine can set data[8:21], which used to be dropped silently.
+      begin : t15
+         reg [63:0] big_ra;
+         big_ra = TARGET_RA | (64'd1 << 42);          // one bit above the 42-bit window
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte(big_ra[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b0);
+         run_walk(ea_epn, "leaf RPN above RA42");
+         if (pte_valid) begin
+            if (f_mchk[0] !== 1'b1) begin
+               $display("  FAIL: leaf RPN above RA42 did not raise mchk (got %b)", f_mchk);
+               errors=errors+1;
+            end else if (pte_out[`ptepos_valid] !== 1'b0) begin
+               $display("  FAIL: truncated RPN installed anyway"); errors=errors+1;
+            end else $display("  leaf RPN above RA42: mchk raised, nothing installed");
+         end
+         finish_walk; #50;
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte(TARGET_RA[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b0);
+      end
+
+      // ---- test 16 (PROBLEMS.md item 8): PID[0:1] non-zero -> badtree ----
+      // effpid carries 12 of the 14 PID bits, so PIDs differing only in the top two would
+      // share a process-table entry. Quadrant 0 only; quadrant 3 forces PID=0.
+      begin : t16
+         integer to;
+         build_tag(ea_epn, 1'b0, 1'b0);
+         req_tag[`tagpos_pid] = 1'b1;                 // PID bit 0 set
+         @(negedge clk); req_valid = 1'b1;
+         @(negedge clk); req_valid = 1'b0;
+         to = 0; pte_taken = 1'b0;
+         while (!pte_valid && to < 2000) begin @(negedge clk); to = to + 1; end
+         if (!pte_valid) begin
+            $display("  FAIL PID[0:1]: no ptereload within 2000 cycles"); errors=errors+1;
+         end else if (f_badtree[0] !== 1'b1) begin
+            $display("  FAIL PID[0:1]: badtree not raised (got %b)", f_badtree); errors=errors+1;
+         end else if (pte_out[`ptepos_valid] !== 1'b0) begin
+            $display("  FAIL PID[0:1]: installed an aliased translation"); errors=errors+1;
+         end else
+            $display("  PID[0:1] non-zero: badtree raised, nothing installed");
+         checks = checks + 1;
+         finish_walk; #50;
+      end
+
+      // ---- tests 17-18 (PROBLEMS.md item 10): C is needed only to STORE ----
+      // ISA v3.1C 6.7.12: "the Reference bit must contain 1 in order to access the
+      // corresponding page and the Change bit must contain 1 in order to store to the
+      // corresponding page."  A load on a clean page therefore installs, and carries the
+      // real C so that mmq_tlb_cmp strips write permission (mmq_tlb_cmp.v:3584-3585).
+      begin : t17
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte(TARGET_RA[55:12], 1'b1,1'b0, 1'b1,1'b1,1'b1, 1'b0);
+         run_walk(ea_epn, "load on C=0 page");           // build_tag leaves class=0, a load
+         if (pte_valid) begin
+            if (f_rc[0] === 1'b1) begin
+               $display("  FAIL: load on a clean page raised rc_err"); errors=errors+1;
+            end else if (pte_out[`ptepos_valid] !== 1'b1) begin
+               $display("  FAIL: load on a clean page did not install"); errors=errors+1;
+            end else if (pte_out[`ptepos_c] !== 1'b0) begin
+               $display("  FAIL: ptepos_c=%b, expected the PTE's real C=0",
+                        pte_out[`ptepos_c]); errors=errors+1;
+            end else $display("  load on C=0 page: installed with C=0, no rc_err");
+         end
+         finish_walk; #50;
+      end
+
+      begin : t18
+         integer to;
+         build_tag(ea_epn, 1'b0, 1'b0);
+         req_tag[`tagpos_class + 1] = 1'b1;              // derat ttype 1 = store
+         @(negedge clk); req_valid = 1'b1;
+         @(negedge clk); req_valid = 1'b0;
+         to = 0; pte_taken = 1'b0;
+         while (!pte_valid && to < 2000) begin @(negedge clk); to = to + 1; end
+         if (!pte_valid) begin
+            $display("  FAIL store on C=0: no ptereload"); errors=errors+1;
+         end else if (f_rc[0] !== 1'b1) begin
+            $display("  FAIL store on C=0: rc_err not raised (got %b)", f_rc); errors=errors+1;
+         end else $display("  store on C=0 page: rc_err raised");
+         checks = checks + 1;
+         finish_walk; #50;
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte(TARGET_RA[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b0);
+      end
+
+      // ---- test 19 (PROBLEMS.md item 19): problem state on a privileged page ----
+      // ISA v3.1C Fig. 6.27: EAA0=1 gives "na" in problem state.
+      begin : t19
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte(TARGET_RA[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b1);
+         build_tag(ea_epn, 1'b0, 1'b1);                  // pr=1, problem state
+         @(negedge clk); req_valid = 1'b1;
+         @(negedge clk); req_valid = 1'b0;
+         begin : t19w
+            integer to;
+            to = 0; pte_taken = 1'b0;
+            while (!pte_valid && to < 2000) begin @(negedge clk); to = to + 1; end
+            if (!pte_valid) begin
+               $display("  FAIL user/priv: no ptereload"); errors=errors+1;
+            end else if (f_perm[0] !== 1'b1) begin
+               $display("  FAIL user/priv: perm_err not raised (got %b)", f_perm); errors=errors+1;
+            end else if (pte_out[`ptepos_valid] !== 1'b0) begin
+               $display("  FAIL user/priv: installed anyway"); errors=errors+1;
+            end else $display("  problem state on a privileged page: perm_err raised");
+            checks = checks + 1;
+         end
+         finish_walk; #50;
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte(TARGET_RA[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b0);
+      end
+
+      // ---- test 20 (PROBLEMS.md item 19): instruction fetch from guarded storage ----
+      // ISA v3.1C Fig. 6.26 rule 1: ifetch is not permitted when G=1 (ATT=10).
+      begin : t20
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte_att(TARGET_RA[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b0, 2'b10);
+         build_tag(ea_epn, 1'b0, 1'b0);
+         req_tag[`tagpos_type_derat] = 1'b0;             // an I-side request instead
+         req_tag[`tagpos_type_ierat] = 1'b1;
+         @(negedge clk); req_valid = 1'b1;
+         @(negedge clk); req_valid = 1'b0;
+         begin : t20w
+            integer to;
+            to = 0; pte_taken = 1'b0;
+            while (!pte_valid && to < 2000) begin @(negedge clk); to = to + 1; end
+            if (!pte_valid) begin
+               $display("  FAIL ifetch/guarded: no ptereload"); errors=errors+1;
+            end else if (f_perm[0] !== 1'b1) begin
+               $display("  FAIL ifetch/guarded: perm_err not raised (got %b)", f_perm);
+               errors=errors+1;
+            end else $display("  instruction fetch from guarded storage: perm_err raised");
+            checks = checks + 1;
+         end
+         finish_walk; #50;
+         mem[(L4_BASE + 8*4) >> 3] = mk_pte(TARGET_RA[55:12], 1'b1,1'b1, 1'b1,1'b1,1'b1, 1'b0);
       end
 
       $display("");

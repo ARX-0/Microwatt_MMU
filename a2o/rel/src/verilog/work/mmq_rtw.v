@@ -196,6 +196,11 @@ module mmq_rtw(
       // These are PTE PS codes, log2(size/1KB) -- NOT the TLB's log4 size codes.
       // A2O UM 6.17.3: TLB SIZE = 0b0 || PTE PS[52:54], valid PS values 0b0010 (4K),
       // 0b0110 (64K), 0b1010 (1M), 0b1110 (16M); PS bit 55 is ignored.
+      // PTE ATT encodings, ISA v3.1C Fig. 6.17
+      parameter [0:1]                        Att_Normal     = 2'b00;
+      parameter [0:1]                        Att_NonIdemIO  = 2'b10;
+      parameter [0:1]                        Att_TolerantIO = 2'b11;
+
       parameter [0:3]                        PTE_PS_16MB = 4'b1110;
       parameter [0:3]                        PTE_PS_1MB  = 4'b1010;
       parameter [0:3]                        PTE_PS_64KB = 4'b0110;
@@ -717,11 +722,16 @@ module mmq_rtw(
          wire [0:29]                     rpn_out;
          wire [0:5]                      usxwr;
          wire [0:4]                      wimge_out;
-         wire                            pde_v, pde_leaf, pde_priv, pde_ci;
+         wire [0:1]                      pde_att;
+         wire                            pde_v, pde_leaf, pde_priv, pde_ci, pde_g;
          wire                            pde_x, pde_w, pde_r, pde_rref, pde_c;
          wire                            rc_ok;
+         wire                            perm_ok;
+         wire                            req_iside, req_store, req_priv;
          wire                            accept;
          wire                            ra_overflow;
+         wire                            data_ra_overflow;
+         wire                            ptcr_ra_overflow;
          reg                             seq_valid_set, seq_valid_clr;
          reg                             seq_load_root_part, seq_load_root_pg;
          reg                             seq_install_valid;
@@ -731,6 +741,15 @@ module mmq_rtw(
          //------------------------------------------------------------------
          assign epn     = ctx_tag_q[i][`tagpos_epn:`tagpos_epn+`EPN_WIDTH-1];
          assign ctx_pid = ctx_tag_q[i][`tagpos_pid:`tagpos_pid+`PID_WIDTH-1];
+         // What kind of access asked for this translation. Available only because the
+         // radix request tag is built from the request itself (mmq_tlb_cmp tlb_rtw_req_tag);
+         // the Book-E tag took these from the TLB way that hit.
+         //   class is the D-ERAT ttype on a derat miss: 0 load, 1 store, 2 epid load,
+         //   3 epid store (mmq_tlb_ctl.v:2508-2517), so class+1 is "is a store".
+         //   pr is MSR[PR]: 1 = problem state.
+         assign req_iside = ctx_tag_q[i][`tagpos_type_ierat];
+         assign req_store = ctx_tag_q[i][`tagpos_type_derat] & ctx_tag_q[i][`tagpos_class + 1];
+         assign req_priv  = ~ctx_tag_q[i][`tagpos_pr];
          assign ctx_thdid[i] = ctx_tag_q[i][`tagpos_thdid:`tagpos_thdid+`THDID_WIDTH-1];
          // quadrant 3 == EA[0] set == EPN[0].  Microwatt mmu.vhdl:1818-1821 forces
          // PID=0 for quadrant 3, so kernel addresses always use process-table entry 0.
@@ -797,7 +816,15 @@ module mmq_rtw(
          assign pde_leaf = ctx_data_q[i][1];    // mw 62  L
          assign pde_rref = ctx_data_q[i][55];   // mw  8  R (reference)
          assign pde_c    = ctx_data_q[i][56];   // mw  7  C (change)
-         assign pde_ci   = ctx_data_q[i][58];   // mw  5  I (cache inhibited)
+         // ATT, the two attribute bits, ISA v3.1C Fig. 6.17 (PTE bits 58:59):
+         //   00 normal memory         -> WIMG 0010
+         //   10 non-idempotent I/O    -> WIMG 0111  (guarded)
+         //   11 tolerant I/O          -> WIMG 0110  (NOT guarded)
+         // 01 is reserved. Fig. 6.26 rule 1 forbids instruction fetch when G=1, so
+         // execute is denied on G, not on I: tolerant I/O stays executable.
+         assign pde_att  = ctx_data_q[i][58:59];
+         assign pde_ci   = pde_att[0];          // mw 5, I: set for both I/O encodings
+         assign pde_g    = (pde_att == Att_NonIdemIO);
          assign pde_priv = ctx_data_q[i][60];   // mw  3  PRIV
          assign pde_r    = ctx_data_q[i][61];   // mw  2  read
          assign pde_w    = ctx_data_q[i][62];   // mw  1  write
@@ -834,6 +861,15 @@ module mmq_rtw(
          // this core can address. That is a machine check, not a silent truncation.
          assign ra_overflow = (ctx_fetch_q[i] == Fetch_Pde) ? |(ctx_data_q[i][8:21]) : 1'b0;
 
+         // The same 42-bit limit applies to three more places that formed an address or a
+         // result from bits [22:51] and silently dropped [8:21]: PTCR (parttbl_addr), the
+         // PATE1 process-table base (prtable_addr) and the leaf RPN (rpn_out). The ISA does
+         // not require a machine check here (v3.1C Fig. 6.17 engineering note leaves the
+         // implemented width to the system), but truncating would hand back an aliased real
+         // address, so the walk is failed instead.
+         assign data_ra_overflow = |(ctx_data_q[i][8:21]);
+         assign ptcr_ra_overflow = |(ptcr[8:21]);
+
          //------------------------------------------------------------------
          // leaf install: size demotion
          //------------------------------------------------------------------
@@ -860,23 +896,45 @@ module mmq_rtw(
          //------------------------------------------------------------------
          // Execute is denied on cache-inhibited pages (mmu.vhdl:367). There is no
          // IAMR/AMR in either core, so no KUEP/KUAP (mmu.vhdl:365, dcache.vhdl:1103).
-         assign usxwr[0] = pde_x & (~pde_ci) & (~pde_priv);   // UX
-         assign usxwr[1] = pde_x & (~pde_ci);                 // SX
+         // EAA, ISA v3.1C Fig. 6.17: bit 1 is Read, bit 2 is READ/WRITE (not "write"),
+         // so a page with RW=1 and R=0 is readable -- "loads permitted only if EAA2=1".
+         // Execute is denied on GUARDED storage (Fig. 6.26 rule 1), not on cache-inhibited
+         // storage: tolerant I/O (ATT=11) is executable.
+         // EAA0 (priv) bars problem state. In privileged state the AMR/IAMR key-0 rules of
+         // Fig. 6.27 would apply; A2O has neither register, so privileged access is allowed.
+         assign usxwr[0] = pde_x & (~pde_g) & (~pde_priv);    // UX
+         assign usxwr[1] = pde_x & (~pde_g);                  // SX
          assign usxwr[2] = pde_w & (~pde_priv);               // UW
          assign usxwr[3] = pde_w;                             // SW
-         assign usxwr[4] = pde_r & (~pde_priv);               // UR
-         assign usxwr[5] = pde_r;                             // SR
+         assign usxwr[4] = (pde_r | pde_w) & (~pde_priv);     // UR
+         assign usxwr[5] = (pde_r | pde_w);                   // SR
+
+         // Walk-time permission check -- ISA v3.1C Fig. 6.26 rule 1 and Fig. 6.27:
+         //   EAA0 (priv) bars problem state outright. In privileged state the AMR/IAMR
+         //     key-0 rules would apply; A2O has neither register, so access is allowed.
+         //   instruction fetch: needs Execute, and is forbidden on GUARDED storage.
+         //   store: needs EAA2 (read/write).
+         //   load:  needs EAA1 or EAA2.
+         // A permission failure takes priority over an R/C failure, as in Microwatt
+         // (mmu.vhdl:1698-1716).
+         assign perm_ok = (req_priv | (~pde_priv)) &
+                          ((req_iside)  ? (pde_x & (~pde_g)) :
+                           (req_store)  ? pde_w :
+                                          (pde_r | pde_w));
 
          // P0-2: R and C are CHECKED, never written back. There is no store path
          // from the MMU (lq_imq.v:107) and no pending-memory-write mechanism, so a
          // hardware R/C update would be an architecturally visible write on behalf
          // of a non-committed instruction. Software must set them, as in Microwatt.
-         // Conservative: the A2O tag carries no load/store bit, so C is required
-         // unconditionally rather than only for stores (Microwatt mmu.vhdl:1700
-         // can test r.store because loadstore1 tells it).
-         assign rc_ok = pde_rref & pde_c;
+         // ISA v3.1C 6.7.12: R must be 1 to access the page, C must be 1 only to STORE
+         // to it, and hardware that cannot set them atomically raises the storage
+         // interrupt instead -- which is what the fault path below does.
+         assign rc_ok = pde_rref & (pde_c | (~req_store));
 
-         assign wimge_out = {1'b0, pde_ci, 1'b1, pde_ci, 1'b0};   // W I M G E
+         // W I M G E.  M=1 and W=0 for all three ATT encodings (ISA v3.1C Fig. 6.17).
+         // E=0: A2O takes byte order from the page E bit only (A2O UM 6.5.5) and has no
+         // MSR[LE], so radix pages are big-endian -- PROBLEMS.md item 13E.
+         assign wimge_out = {1'b0, pde_ci, 1'b1, pde_g, 1'b0};
 
          // A2O ptepos format; mmq_tlb_cmp.v:3576-3581 folds r/c into usxwr, and
          // RA[41:12] sits at ptepos_rpn+10 .. +39 (see mmq_tlb_ctl.v:3229).
@@ -885,7 +943,7 @@ module mmq_rtw(
                                   1'b1,                            // ptepos_r     45
                                   4'b0,                            // ptepos_ubits 46:49
                                   1'b0,                            // ptepos_sw0   50
-                                  1'b1,                            // ptepos_c     51
+                                  pde_c,                           // ptepos_c     51
                                   inst_size,                       // ptepos_size  52:55
                                   usxwr,                           // ptepos_usxwr 56:61
                                   1'b0,                            // ptepos_sw1   62
@@ -1000,6 +1058,11 @@ module mmq_rtw(
                      ctx_fault_d[i] = Flt_Mchk;
                      ctx_seq_d[i]   = RtwSeq_Timeout;
                   end
+                  else if (ptcr_ra_overflow == 1'b1)
+                  begin                                 // PTCR points outside RA 42
+                     ctx_fault_d[i] = Flt_Mchk;
+                     ctx_seq_d[i]   = RtwSeq_Fault;
+                  end
                   else
                   begin
                      ctx_seq_load_req[i] = 1'b1;
@@ -1037,6 +1100,11 @@ module mmq_rtw(
                      else if (ctx_err_q[i] == 3'b100)
                      begin
                         ctx_fault_d[i] = Flt_Mchk;
+                        ctx_seq_d[i]   = RtwSeq_Fault;
+                     end
+                     else if (data_ra_overflow == 1'b1)
+                     begin                                 // PATE1 process-table base
+                        ctx_fault_d[i] = Flt_Mchk;         // outside RA 42
                         ctx_seq_d[i]   = RtwSeq_Fault;
                      end
                      else
@@ -1124,7 +1192,13 @@ module mmq_rtw(
                         ctx_seq_d[i]   = RtwSeq_Fault;
                      end
                      else if ((root_rpds < 5'd5) | (root_rpds > 5'd16) |
-                              ({1'b0, root_rpds} > (ctx_shift_q[i] + 6'd19)))
+                              ({1'b0, root_rpds} > (ctx_shift_q[i] + 6'd19)) |
+                              // effpid drops PID[0:1] (12 of PID_WIDTH=14 bits), so two
+                              // PIDs differing only there would share a process-table
+                              // entry. ISA v3.1C 5.3.3 lets an implementation support
+                              // fewer PIDR bits, but not alias two processes onto one
+                              // translation, so such a PID is refused instead.
+                              ((~ctx_quad3[i]) & (|(ctx_pid[0:`PID_WIDTH-13]))))
                      begin
                         ctx_fault_d[i] = Flt_BadTree;
                         ctx_seq_d[i]   = RtwSeq_Fault;
@@ -1204,7 +1278,17 @@ module mmq_rtw(
                      end
                      else if (pde_leaf == 1'b1)
                      begin
-                        if (rc_ok == 1'b0)
+                        if (data_ra_overflow == 1'b1)
+                        begin                              // leaf RPN outside RA 42
+                           ctx_fault_d[i] = Flt_Mchk;
+                           ctx_seq_d[i]   = RtwSeq_Fault;
+                        end
+                        else if (perm_ok == 1'b0)
+                        begin                              // ISA v3.1C Fig. 6.26/6.27;
+                           ctx_fault_d[i] = Flt_PermErr;   // outranks an R/C failure
+                           ctx_seq_d[i]   = RtwSeq_Fault;
+                        end
+                        else if (rc_ok == 1'b0)
                         begin
                            ctx_fault_d[i] = Flt_RcErr;
                            ctx_seq_d[i]   = RtwSeq_Fault;
