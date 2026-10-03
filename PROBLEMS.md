@@ -71,6 +71,10 @@ core. This revision re-judges every item against:
 - **Commits (branch `radix-integration-fixes`, from `main` at `7ad773a`):**
   - `82edd6b`: RTL fixes for items 1, 2, 3, 4, 5, 22 and 23.
   - `56701fa`: the cocotb bench.
+  - `b1cd807`: this file.
+  - `1e5178b`: RTL fixes for items 8, 9, 10, 11, 13G and 19, with their tb_walk cases.
+  - `257dbc9`: the branch README.
+  - `f583061`: this file's record of the semantics batch, and the sim-artifact .gitignore.
   - The simulation logs and the `sim_build*/` output are **not** committed. They are local
     evidence in `a2o/rel/src/verilog/sim/cocotb/`.
 
@@ -101,19 +105,19 @@ Paths below are relative to `a2o/rel/src/verilog/work/` unless stated.
 | 5 | Request PID/LPID/GS/AS/thread mask taken from the TLB way | Blocker | Confirmed | ☑ | ☑ `82edd6b` |
 | 6 | Quadrant-0 root cache shared across threads | High | Confirmed | ☑ | ☐ |
 | 7 | Root cache refilled with stale data after a PTCR/PID write | — | Reduced to item 6 | ☑ | ☐ (test only) |
-| 8 | Process-table index ignores PID[0:1] | Low | Confirmed | ☑ | ☑ uncommitted |
-| 9 | Leaf RPN and table bases above RA 42 silently truncated | Medium | Confirmed | ☑ | ☑ uncommitted |
-| 10 | C bit required for loads and instruction fetch | High | Confirmed (ISA) | ☑ | ☑ uncommitted |
-| 11 | Page with RW=1, R=0 is not readable | Medium | Confirmed (ISA) | ☑ | ☑ uncommitted |
+| 8 | Process-table index ignores PID[0:1] | Low | Confirmed | ☑ | ☑ `1e5178b` |
+| 9 | Leaf RPN and table bases above RA 42 silently truncated | Medium | Confirmed | ☑ | ☑ `1e5178b` |
+| 10 | C bit required for loads and instruction fetch | High | Confirmed (ISA) | ☑ | ☑ `1e5178b` |
+| 11 | Page with RW=1, R=0 is not readable | Medium | Confirmed (ISA) | ☑ | ☑ `1e5178b` |
 | 12 | ESR reports the wrong access type | Medium | Confirmed | ☑ | ☐ |
-| 13G | ATT decoded as one bit: tolerant I/O is guarded and not executable | Medium | Confirmed (ISA) | ☑ | ☑ uncommitted |
+| 13G | ATT decoded as one bit: tolerant I/O is guarded and not executable | Medium | Confirmed (ISA) | ☑ | ☑ `1e5178b` |
 | 13E | No MSR[LE]: radix pages are always big-endian | Migration gap | Confirmed (UM) | ☐ | ☐ |
 | 14 | Flush or invalidate in the accept cycle is ignored | Low | Benign (OoO + ISA) | ☑ | ☐ (comment only) |
 | 15 | A miss arriving while the thread's walker is draining is dropped | High | Probable | ☑ investigate | ☐ |
 | 16 | Any flush kills the walk: livelock risk | — | Refuted (OoO) | ☑ | — |
 | 17 | Load left in flight after a timeout can pollute the next walk | Low | Probable | ☑ investigate | ☐ |
 | 18 | LRAT handshake is circular | Latent | Confirmed | ☑ defer | — |
-| 19 | No walk-time permission check; `rtw_perm_err` is dead | Medium | Confirmed | ☑ | ☑ uncommitted |
+| 19 | No walk-time permission check; `rtw_perm_err` is dead | Medium | Confirmed | ☑ | ☑ `1e5178b` |
 | 20 | Test and lint flow let items 1–5 through | Process | Confirmed | ☑ | ☐ |
 | 21 | `NEXT.md` and docs claims that are now false | Docs | Confirmed | ☑ | ☐ |
 | 22 | PTE page-size field uses TLB codes, not PTE PS codes | Blocker | Confirmed in simulation | ☑ | ☑ `82edd6b` |
@@ -354,7 +358,7 @@ the cache with the old entry (`mmq_rtw.v:1038, 1095`).
 - Change: `mmq_rtw.v`, `SegChk` now raises `Flt_BadTree` when the request is quadrant 0 and
   `ctx_pid[0:1]` is non-zero, so two PIDs can never share a process-table entry.
 - Evidence: `tb_walk.v` test 16, "PID[0:1] non-zero: badtree raised, nothing installed".
-- Uncommitted.
+- Committed in `1e5178b`.
 
 ---
 
@@ -383,7 +387,7 @@ so a machine check is a defensive choice that A2O is free to make.
   in `PartRd` (PTCR), in `PartWait` (the PATE1 process-table base) and in the `ReadWait`
   leaf branch (the leaf RPN). The existing `ra_overflow` check on the next PDE base stays.
 - Evidence: `tb_walk.v` test 15, "leaf RPN above RA42: mchk raised, nothing installed".
-- Uncommitted.
+- Committed in `1e5178b`.
 
 ---
 
@@ -422,7 +426,7 @@ so a machine check is a defensive choice that A2O is free to make.
 - Evidence: `tb_walk.v` tests 17 and 18 — a load on a C=0 page installs with C=0 and no
   rc_err; a store on the same page raises rc_err. A later store that hits an entry installed
   by a load is refused by the ERAT, because `mmq_tlb_cmp.v:3584-3585` ANDs C into UW/SW.
-- Uncommitted.
+- Committed in `1e5178b`.
 
 ---
 
@@ -444,7 +448,7 @@ Bit 2 is **Read/Write**, not Write. A Read/Write page is readable by definition.
 **Fix applied:**
 - Change: `mmq_rtw.v`, `usxwr[4]`/`usxwr[5]` (UR/SR) are now `(pde_r | pde_w)`.
 - Evidence: `tb_walk.v` test 12, "RW=1,R=0 page is readable: usxwr=001111".
-- Uncommitted.
+- Committed in `1e5178b`.
 
 ---
 
@@ -505,7 +509,7 @@ marked guarded and wrongly made non-executable. Microwatt has the same simplific
   than on I.
 - Evidence: `tb_walk.v` tests 13 and 14 — tolerant I/O gives WIMG `01100` and stays
   executable; non-idempotent I/O gives `01110` and loses execute.
-- Uncommitted.
+- Committed in `1e5178b`.
 
 ---
 
@@ -690,7 +694,7 @@ refused).
   the R/C check, so `rtw_perm_err` is live.
 - Evidence: `tb_walk.v` tests 19 and 20 — problem state on a privileged page, and an
   instruction fetch from guarded storage, each raise perm_err and install nothing.
-- Uncommitted.
+- Committed in `1e5178b`.
 
 ---
 
