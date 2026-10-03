@@ -74,6 +74,10 @@ core. This revision re-judges every item against:
   - The simulation logs and the `sim_build*/` output are **not** committed. They are local
     evidence in `a2o/rel/src/verilog/sim/cocotb/`.
 
+- **2026-10-03, semantics batch.** Items 8, 9, 10, 11, 13G and 19 fixed in `mmq_rtw.v`,
+  each with a `tb_walk.v` case. `run_rtw_tests.sh` now runs 20 walk scenarios, all passing;
+  cocotb unchanged at `TESTS=10 PASS=10` (`after_phaseC.log`).
+
 **Status labels.**
 - **Confirmed:** follows from the code and the cited spec.
 - **Confirmed in simulation:** seen in a cocotb run.
@@ -97,19 +101,19 @@ Paths below are relative to `a2o/rel/src/verilog/work/` unless stated.
 | 5 | Request PID/LPID/GS/AS/thread mask taken from the TLB way | Blocker | Confirmed | ☑ | ☑ `82edd6b` |
 | 6 | Quadrant-0 root cache shared across threads | High | Confirmed | ☑ | ☐ |
 | 7 | Root cache refilled with stale data after a PTCR/PID write | — | Reduced to item 6 | ☑ | ☐ (test only) |
-| 8 | Process-table index ignores PID[0:1] | Low | Confirmed | ☑ | ☐ |
-| 9 | Leaf RPN and table bases above RA 42 silently truncated | Medium | Confirmed | ☑ | ☐ |
-| 10 | C bit required for loads and instruction fetch | High | Confirmed (ISA) | ☑ | ☐ |
-| 11 | Page with RW=1, R=0 is not readable | Medium | Confirmed (ISA) | ☑ | ☐ |
+| 8 | Process-table index ignores PID[0:1] | Low | Confirmed | ☑ | ☑ uncommitted |
+| 9 | Leaf RPN and table bases above RA 42 silently truncated | Medium | Confirmed | ☑ | ☑ uncommitted |
+| 10 | C bit required for loads and instruction fetch | High | Confirmed (ISA) | ☑ | ☑ uncommitted |
+| 11 | Page with RW=1, R=0 is not readable | Medium | Confirmed (ISA) | ☑ | ☑ uncommitted |
 | 12 | ESR reports the wrong access type | Medium | Confirmed | ☑ | ☐ |
-| 13G | ATT decoded as one bit: tolerant I/O is guarded and not executable | Medium | Confirmed (ISA) | ☑ | ☐ |
+| 13G | ATT decoded as one bit: tolerant I/O is guarded and not executable | Medium | Confirmed (ISA) | ☑ | ☑ uncommitted |
 | 13E | No MSR[LE]: radix pages are always big-endian | Migration gap | Confirmed (UM) | ☐ | ☐ |
 | 14 | Flush or invalidate in the accept cycle is ignored | Low | Benign (OoO + ISA) | ☑ | ☐ (comment only) |
 | 15 | A miss arriving while the thread's walker is draining is dropped | High | Probable | ☑ investigate | ☐ |
 | 16 | Any flush kills the walk: livelock risk | — | Refuted (OoO) | ☑ | — |
 | 17 | Load left in flight after a timeout can pollute the next walk | Low | Probable | ☑ investigate | ☐ |
 | 18 | LRAT handshake is circular | Latent | Confirmed | ☑ defer | — |
-| 19 | No walk-time permission check; `rtw_perm_err` is dead | Medium | Confirmed | ☑ | ☐ |
+| 19 | No walk-time permission check; `rtw_perm_err` is dead | Medium | Confirmed | ☑ | ☑ uncommitted |
 | 20 | Test and lint flow let items 1–5 through | Process | Confirmed | ☑ | ☐ |
 | 21 | `NEXT.md` and docs claims that are now false | Docs | Confirmed | ☑ | ☐ |
 | 22 | PTE page-size field uses TLB codes, not PTE PS codes | Blocker | Confirmed in simulation | ☑ | ☑ `82edd6b` |
@@ -347,6 +351,10 @@ the cache with the old entry (`mmq_rtw.v:1038, 1095`).
 **Your decision:** (a) *(chat, 2026-09-21)*
 
 **Fix applied:**
+- Change: `mmq_rtw.v`, `SegChk` now raises `Flt_BadTree` when the request is quadrant 0 and
+  `ctx_pid[0:1]` is non-zero, so two PIDs can never share a process-table entry.
+- Evidence: `tb_walk.v` test 16, "PID[0:1] non-zero: badtree raised, nothing installed".
+- Uncommitted.
 
 ---
 
@@ -371,6 +379,11 @@ so a machine check is a defensive choice that A2O is free to make.
 **Your decision:** (a) *(chat, 2026-09-21)*
 
 **Fix applied:**
+- Change: `mmq_rtw.v` adds `data_ra_overflow` and `ptcr_ra_overflow`, and raises `Flt_Mchk`
+  in `PartRd` (PTCR), in `PartWait` (the PATE1 process-table base) and in the `ReadWait`
+  leaf branch (the leaf RPN). The existing `ra_overflow` check on the next PDE base stays.
+- Evidence: `tb_walk.v` test 15, "leaf RPN above RA42: mchk raised, nothing installed".
+- Uncommitted.
 
 ---
 
@@ -403,6 +416,13 @@ so a machine check is a defensive choice that A2O is free to make.
 **Your decision:** (a) including the real-C pass-through *(chat, 2026-09-21)*
 
 **Fix applied:**
+- Change: `mmq_rtw.v`, `rc_ok = pde_rref & (pde_c | ~req_store)`, and `ptepos_c` now carries
+  the PTE's real C instead of a hard-wired 1. `req_store` comes from the request tag's class
+  field, which is only correct because of item 5.
+- Evidence: `tb_walk.v` tests 17 and 18 — a load on a C=0 page installs with C=0 and no
+  rc_err; a store on the same page raises rc_err. A later store that hits an entry installed
+  by a load is refused by the ERAT, because `mmq_tlb_cmp.v:3584-3585` ANDs C into UW/SW.
+- Uncommitted.
 
 ---
 
@@ -422,6 +442,9 @@ Bit 2 is **Read/Write**, not Write. A Read/Write page is readable by definition.
 **Your decision:** (a) *(chat, 2026-09-21)*
 
 **Fix applied:**
+- Change: `mmq_rtw.v`, `usxwr[4]`/`usxwr[5]` (UR/SR) are now `(pde_r | pde_w)`.
+- Evidence: `tb_walk.v` test 12, "RW=1,R=0 page is readable: usxwr=001111".
+- Uncommitted.
 
 ---
 
@@ -477,6 +500,12 @@ marked guarded and wrongly made non-executable. Microwatt has the same simplific
 **Your decision:** (a) *(chat, 2026-09-21)*
 
 **Fix applied:**
+- Change: `mmq_rtw.v` adds `pde_att` and `pde_g` with the Fig. 6.17 encodings as named
+  parameters; `wimge_out` now uses G from `ATT == 10`, and execute is denied on G rather
+  than on I.
+- Evidence: `tb_walk.v` tests 13 and 14 — tolerant I/O gives WIMG `01100` and stays
+  executable; non-idempotent I/O gives `01110` and loses execute.
+- Uncommitted.
 
 ---
 
@@ -655,6 +684,13 @@ refused).
 2026-09-21)*.
 
 **Fix applied:**
+- Change: `mmq_rtw.v` adds `perm_ok` — problem state barred on EAA0=1; instruction fetch
+  needs Execute and is denied on guarded storage; a store needs read/write; a load needs
+  read or read/write. A failure raises `Flt_PermErr` in the `ReadWait` leaf branch, ahead of
+  the R/C check, so `rtw_perm_err` is live.
+- Evidence: `tb_walk.v` tests 19 and 20 — problem state on a privileged page, and an
+  instruction fetch from guarded storage, each raise perm_err and install nothing.
+- Uncommitted.
 
 ---
 

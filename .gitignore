@@ -1,0 +1,5 @@
+# Local editor tooling, not part of the reviewable port
+/hdl-plugins/
+
+# Session handoff scratch file, rewritten whenever work pauses
+/PAUSE.md

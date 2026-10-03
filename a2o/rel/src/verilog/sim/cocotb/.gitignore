@@ -1,0 +1,6 @@
+# cocotb build output and run artifacts: reproduced by `make`, not reviewable source.
+# PROBLEMS.md cites the *.log files as evidence; rerun the bench to regenerate them.
+sim_build*/
+results.xml
+__pycache__/
+*.log
