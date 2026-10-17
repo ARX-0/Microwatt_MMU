@@ -87,3 +87,13 @@ That single sentence drives everything below.
 - The clean, PR-ready version of the radix work lives in a separate repo,
   `../a2o-radix-mmu`, on branch `a2o_MMU`, cut from upstream `master`.
 - Tests: `a2o/rel/src/verilog/sim/run_rtw_tests.sh` (needs `verilator` and `iverilog`).
+
+## 5. Output and RTL conventions
+
+- Be concise in output, thorough in reasoning. No sycophantic openers or closing fluff.
+- Prefer editing over rewriting whole files. Do not re-read files unless they may have
+  changed.
+- Skip files over 100KB unless explicitly required.
+- RTL: keep modules simple over clever; flag any module over 150 lines for a split.
+- Every new module/entity gets a matching testbench before being marked done.
+- Run `verible-verilog-lint` / `vhdl_ls` diagnostics before declaring a file finished.
