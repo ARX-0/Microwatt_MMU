@@ -1,0 +1,15 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1791020917" />
+    <testcase name="test_m1_derat_cold" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="419" time="0.35312604904174805" sim_time_ns="1985.001" ratio_time="5621.225070726303" />
+    <testcase name="test_m2_ierat_cold" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="426" time="0.30722737312316895" sim_time_ns="1985.001" ratio_time="6461.0160866239075" />
+    <testcase name="test_m3_epn_mismatch" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="433" time="0.5089690685272217" sim_time_ns="3305.0009999999997" ratio_time="6493.5203421369315" />
+    <testcase name="test_m4_pid_mismatch" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="441" time="0.511519193649292" sim_time_ns="3305.001000000001" ratio_time="6461.147579666341" />
+    <testcase name="test_m5_lpid_mismatch" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="449" time="0.5567936897277832" sim_time_ns="3485.0009999999984" ratio_time="6259.052615527697" />
+    <testcase name="test_m6_as_mismatch" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="462" time="0.5224947929382324" sim_time_ns="3305.001000000002" ratio_time="6325.423802626696" />
+    <testcase name="test_m8_64k_page" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="470" time="0.5785207748413086" sim_time_ns="3655.001" ratio_time="6317.83880363257" />
+    <testcase name="test_n1_speculative_miss" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="487" time="0.7311093807220459" sim_time_ns="5445.001" ratio_time="7447.587383740721" />
+    <testcase name="test_n3_invalid_leaf" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="500" time="0.3909931182861328" sim_time_ns="2575.0009999999966" ratio_time="6585.796218836732" />
+    <testcase name="test_selftest_watchdog" classname="test_tlbmiss" file="/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py" lineno="517" time="5.634974241256714" sim_time_ns="41725.001" ratio_time="7404.648045151396" />
+  </testsuite>
+</testsuites>

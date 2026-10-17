@@ -1,0 +1,6 @@
+{
+  "vhdl": {
+    "command": "vhdl_ls",
+    "extensionToLanguage": { ".vhd": "vhdl", ".vhdl": "vhdl" }
+  }
+}

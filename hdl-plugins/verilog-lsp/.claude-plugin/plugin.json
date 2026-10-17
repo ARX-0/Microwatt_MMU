@@ -1,0 +1,6 @@
+{
+  "name": "verilog-lsp",
+  "description": "Verible LSP for Verilog/SystemVerilog",
+  "version": "1.0.0",
+  "license": "MIT"
+}

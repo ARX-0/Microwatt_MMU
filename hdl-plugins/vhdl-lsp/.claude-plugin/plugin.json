@@ -1,0 +1,6 @@
+{
+  "name": "vhdl-lsp",
+  "description": "rust_hdl (vhdl_ls) LSP for VHDL",
+  "version": "1.0.0",
+  "license": "MIT"
+}

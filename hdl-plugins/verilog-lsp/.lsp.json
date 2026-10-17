@@ -1,0 +1,6 @@
+{
+  "verilog": {
+    "command": "verible-verilog-ls",
+    "extensionToLanguage": { ".v": "verilog", ".sv": "verilog", ".svh": "verilog" }
+  }
+}

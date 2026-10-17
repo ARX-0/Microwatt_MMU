@@ -1,0 +1,8 @@
+{
+  "name": "hdl-plugins",
+  "owner": { "name": "Athi Ram R S" },
+  "plugins": [
+    { "name": "verilog-lsp", "source": "./verilog-lsp" },
+    { "name": "vhdl-lsp", "source": "./vhdl-lsp" }
+  ]
+}

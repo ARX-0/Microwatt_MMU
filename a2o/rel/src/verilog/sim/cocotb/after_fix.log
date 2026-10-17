@@ -1,0 +1,226 @@
+rm -f results.xml
+"make" -f Makefile results.xml
+make[1]: Entering directory '/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb'
+mkdir -p sim_build_cfg13
+/home/arx-0/.local/bin/iverilog -o sim_build_cfg13/sim.vvp -D COCOTB_SIM=1 -s mmq -g2012 -I/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work -I/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/trilib -y/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work -y/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/trilib -Pmmq.BCFG_TLB0CFG_VALUE=13 -f sim_build_cfg13/cmds.f  /home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/tri_event_mux1t.v /home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/RAMB16_S36_S36.v /home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/mmq_kw.v
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/tri_event_mux1t.v:98: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/tri_event_mux1t.v:129: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/tri_event_mux1t.v:122: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/tri_event_mux1t.v:146: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work/mmq.v:1305: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work/mmq.v:1358: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work/mmq.v:1377: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/trilib/tri_rlmreg_p.v:70: warning: Anachronistic use of begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/trilib/tri_rlmlatch_p.v:68: warning: Anachronistic use of begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/trilib/tri_regk.v:85: warning: Anachronistic use of begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work/mmq_spr.v:1148: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work/mmq_spr.v:1171: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work/mmq_dbg.v:802: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work/mmq_tlb_ctl.v:3425: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/work/mmq_tlb_lrat.v:1861: warning: Anachronistic use of named begin/end to surround generate schemes.
+/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/trilib/tri_128x168_1w_0.v:187: warning: Anachronistic use of begin/end to surround generate schemes.
+rm -f results.xml
+MODULE=test_tlbmiss TESTCASE= TOPLEVEL=mmq TOPLEVEL_LANG=verilog \
+         /home/arx-0/.local/bin/vvp -M /home/arx-0/.venvs/cocotb/lib/python3.10/site-packages/cocotb/libs -m libcocotbvpi_icarus   sim_build_cfg13/sim.vvp  
+     -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:108  in set_program_name_in_venv        Using Python virtual environment interpreter at /home/arx-0/.venvs/cocotb/bin/python
+     -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered
+     0.00ns INFO     cocotb                             Running on Icarus Verilog version 11.0 (stable)
+     0.00ns INFO     cocotb                             Running tests with cocotb v1.9.2 from /home/arx-0/.venvs/cocotb/lib/python3.10/site-packages/cocotb
+     0.00ns INFO     cocotb                             Seeding Python random module with 1789982394
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_m1_derat_cold
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_m2_ierat_cold
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_m3_epn_mismatch
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_m4_pid_mismatch
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_m5_lpid_mismatch
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_m6_as_mismatch
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_m8_64k_page
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_n1_speculative_miss
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_n3_invalid_leaf
+     0.00ns INFO     cocotb.regression                  Found test test_tlbmiss.test_selftest_watchdog
+     0.00ns INFO     cocotb.regression                  running test_m1_derat_cold (1/10)
+                                                          M1: empty TLB, D-ERAT miss.
+   435.00ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+   635.00ns INFO     cocotb.mmq                           EVENT 1 M1: TLB miss handed to mmq_rtw (cycle 63)
+   665.00ns INFO     cocotb.mmq                             [L2] load 1 addr=00000100008 data=0000000000200009
+   785.00ns INFO     cocotb.mmq                             [L2] load 2 addr=00000200000 data=4000000000300029
+   915.00ns INFO     cocotb.mmq                             [L2] load 3 addr=00000300008 data=8000000000400009
+  1035.00ns INFO     cocotb.mmq                             [L2] load 4 addr=00000400010 data=8000000000500009
+  1155.00ns INFO     cocotb.mmq                             [L2] load 5 addr=00000500018 data=8000000000600009
+  1275.00ns INFO     cocotb.mmq                             [L2] load 6 addr=00000600020 data=c000000000804187
+  1425.00ns INFO     cocotb.regression                  test_m1_derat_cold failed
+                                                        Traceback (most recent call last):
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 409, in test_m1_derat_cold
+                                                            await tb.miss_walk_hit("derat", ea_4k(4), TARGET_4K + 4 * 0x1000, "M1")
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 357, in miss_walk_hit
+                                                            assert self.seen("tlb_write", c0), f"{label}: EVENT 2 ERAT reloaded but no TLB way written"
+                                                        AssertionError: M1: EVENT 2 ERAT reloaded but no TLB way written
+                                                        assert []
+                                                         +  where [] = seen('tlb_write', 44)
+                                                         +    where seen = <test_tlbmiss.Tb object at 0x751f0225fb50>.seen
+  1425.00ns INFO     cocotb.regression                  running test_m2_ierat_cold (2/10)
+                                                          M2: empty TLB, I-ERAT miss.
+  1860.00ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+  2060.00ns INFO     cocotb.mmq                           EVENT 1 M2: TLB miss handed to mmq_rtw (cycle 63)
+  2090.00ns INFO     cocotb.mmq                             [L2] load 1 addr=00000100008 data=0000000000200009
+  2210.00ns INFO     cocotb.mmq                             [L2] load 2 addr=00000200000 data=4000000000300029
+  2340.00ns INFO     cocotb.mmq                             [L2] load 3 addr=00000300008 data=8000000000400009
+  2460.00ns INFO     cocotb.mmq                             [L2] load 4 addr=00000400010 data=8000000000500009
+  2580.00ns INFO     cocotb.mmq                             [L2] load 5 addr=00000500018 data=8000000000600009
+  2700.00ns INFO     cocotb.mmq                             [L2] load 6 addr=00000600028 data=c000000000805187
+  2850.00ns INFO     cocotb.regression                  test_m2_ierat_cold failed
+                                                        Traceback (most recent call last):
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 416, in test_m2_ierat_cold
+                                                            await tb.miss_walk_hit("ierat", ea_4k(5), TARGET_4K + 5 * 0x1000, "M2")
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 357, in miss_walk_hit
+                                                            assert self.seen("tlb_write", c0), f"{label}: EVENT 2 ERAT reloaded but no TLB way written"
+                                                        AssertionError: M2: EVENT 2 ERAT reloaded but no TLB way written
+                                                        assert []
+                                                         +  where [] = seen('tlb_write', 44)
+                                                         +    where seen = <test_tlbmiss.Tb object at 0x751f0211cbb0>.seen
+  2850.00ns INFO     cocotb.regression                  running test_m3_epn_mismatch (3/10)
+                                                          M3: TLB holds EA A; EA B misses on the address compare.
+  3285.00ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+  3485.00ns INFO     cocotb.mmq                           EVENT 1 M3/A: TLB miss handed to mmq_rtw (cycle 63)
+  3515.00ns INFO     cocotb.mmq                             [L2] load 1 addr=00000100008 data=0000000000200009
+  3635.00ns INFO     cocotb.mmq                             [L2] load 2 addr=00000200000 data=4000000000300029
+  3765.00ns INFO     cocotb.mmq                             [L2] load 3 addr=00000300008 data=8000000000400009
+  3885.00ns INFO     cocotb.mmq                             [L2] load 4 addr=00000400010 data=8000000000500009
+  4005.00ns INFO     cocotb.mmq                             [L2] load 5 addr=00000500018 data=8000000000600009
+  4125.00ns INFO     cocotb.mmq                             [L2] load 6 addr=00000600030 data=c000000000806187
+  4275.00ns INFO     cocotb.regression                  test_m3_epn_mismatch failed
+                                                        Traceback (most recent call last):
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 423, in test_m3_epn_mismatch
+                                                            await tb.miss_walk_hit("derat", ea_4k(6), TARGET_4K + 6 * 0x1000, "M3/A")
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 357, in miss_walk_hit
+                                                            assert self.seen("tlb_write", c0), f"{label}: EVENT 2 ERAT reloaded but no TLB way written"
+                                                        AssertionError: M3/A: EVENT 2 ERAT reloaded but no TLB way written
+                                                        assert []
+                                                         +  where [] = seen('tlb_write', 44)
+                                                         +    where seen = <test_tlbmiss.Tb object at 0x751f0211da20>.seen
+  4275.00ns INFO     cocotb.regression                  running test_m4_pid_mismatch (4/10)
+                                                          M4: entry installed for PID 5; the same EA under PID 6 misses.
+  4710.00ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+  4910.00ns INFO     cocotb.mmq                           EVENT 1 M4/pid5: TLB miss handed to mmq_rtw (cycle 63)
+  4940.00ns INFO     cocotb.mmq                             [L2] load 1 addr=00000100008 data=0000000000200009
+  5060.00ns INFO     cocotb.mmq                             [L2] load 2 addr=00000200050 data=4000000000300029
+  5190.00ns INFO     cocotb.mmq                             [L2] load 3 addr=00000300008 data=8000000000400009
+  5310.00ns INFO     cocotb.mmq                             [L2] load 4 addr=00000400010 data=8000000000500009
+  5430.00ns INFO     cocotb.mmq                             [L2] load 5 addr=00000500018 data=8000000000600009
+  5550.00ns INFO     cocotb.mmq                             [L2] load 6 addr=00000600040 data=c000000000808187
+  5700.00ns INFO     cocotb.regression                  test_m4_pid_mismatch failed
+                                                        Traceback (most recent call last):
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 431, in test_m4_pid_mismatch
+                                                            await tb.miss_walk_hit("derat", ea_4k(8), TARGET_4K + 8 * 0x1000, "M4/pid5", pid=5)
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 357, in miss_walk_hit
+                                                            assert self.seen("tlb_write", c0), f"{label}: EVENT 2 ERAT reloaded but no TLB way written"
+                                                        AssertionError: M4/pid5: EVENT 2 ERAT reloaded but no TLB way written
+                                                        assert []
+                                                         +  where [] = seen('tlb_write', 44)
+                                                         +    where seen = <test_tlbmiss.Tb object at 0x751f0211dd20>.seen
+  5700.00ns INFO     cocotb.regression                  running test_m5_lpid_mismatch (5/10)
+                                                          M5: entry installed for LPID 1; the same EA under LPID 2 misses.
+  6135.00ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+  6335.00ns INFO     cocotb.mmq                           EVENT 1 M5/lpid1: TLB miss handed to mmq_rtw (cycle 63)
+  6365.00ns INFO     cocotb.mmq                             [L2] load 1 addr=00000100008 data=0000000000200009
+  6485.00ns INFO     cocotb.mmq                             [L2] load 2 addr=00000200000 data=4000000000300029
+  6615.00ns INFO     cocotb.mmq                             [L2] load 3 addr=00000300008 data=8000000000400009
+  6735.00ns INFO     cocotb.mmq                             [L2] load 4 addr=00000400010 data=8000000000500009
+  6855.00ns INFO     cocotb.mmq                             [L2] load 5 addr=00000500018 data=8000000000600009
+  6975.00ns INFO     cocotb.mmq                             [L2] load 6 addr=00000600048 data=c000000000809187
+  7125.01ns INFO     cocotb.regression                  test_m5_lpid_mismatch failed
+                                                        Traceback (most recent call last):
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 439, in test_m5_lpid_mismatch
+                                                            await tb.miss_walk_hit("derat", ea_4k(9), TARGET_4K + 9 * 0x1000, "M5/lpid1", lpid=1)
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 357, in miss_walk_hit
+                                                            assert self.seen("tlb_write", c0), f"{label}: EVENT 2 ERAT reloaded but no TLB way written"
+                                                        AssertionError: M5/lpid1: EVENT 2 ERAT reloaded but no TLB way written
+                                                        assert []
+                                                         +  where [] = seen('tlb_write', 44)
+                                                         +    where seen = <test_tlbmiss.Tb object at 0x751f0211c2b0>.seen
+  7125.01ns INFO     cocotb.regression                  running test_m6_as_mismatch (6/10)
+                                                          M6: entry installed with AS=0; the same EA with AS=1 misses on the state compare.
+  7560.01ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+  7760.01ns INFO     cocotb.mmq                           EVENT 1 M6/as0: TLB miss handed to mmq_rtw (cycle 63)
+  7790.01ns INFO     cocotb.mmq                             [L2] load 1 addr=00000100008 data=0000000000200009
+  7910.01ns INFO     cocotb.mmq                             [L2] load 2 addr=00000200000 data=4000000000300029
+  8040.01ns INFO     cocotb.mmq                             [L2] load 3 addr=00000300008 data=8000000000400009
+  8160.01ns INFO     cocotb.mmq                             [L2] load 4 addr=00000400010 data=8000000000500009
+  8280.00ns INFO     cocotb.mmq                             [L2] load 5 addr=00000500018 data=8000000000600009
+  8400.00ns INFO     cocotb.mmq                             [L2] load 6 addr=00000600050 data=c00000000080a187
+  8550.01ns INFO     cocotb.regression                  test_m6_as_mismatch failed
+                                                        Traceback (most recent call last):
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 447, in test_m6_as_mismatch
+                                                            await tb.miss_walk_hit("derat", ea_4k(10), TARGET_4K + 10 * 0x1000, "M6/as0", as_=0)
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 357, in miss_walk_hit
+                                                            assert self.seen("tlb_write", c0), f"{label}: EVENT 2 ERAT reloaded but no TLB way written"
+                                                        AssertionError: M6/as0: EVENT 2 ERAT reloaded but no TLB way written
+                                                        assert []
+                                                         +  where [] = seen('tlb_write', 44)
+                                                         +    where seen = <test_tlbmiss.Tb object at 0x751f0211e3e0>.seen
+  8550.01ns INFO     cocotb.regression                  running test_m8_64k_page (7/10)
+                                                          M8: a 64 KB leaf is installed at 64 KB; another 4 KB sub-page of it hits
+                                                          without a walk, and a different 64 KB page misses.
+  8985.01ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+  9185.01ns INFO     cocotb.mmq                           EVENT 1 M8/sub0: TLB miss handed to mmq_rtw (cycle 63)
+  9215.01ns INFO     cocotb.mmq                             [L2] load 1 addr=00000100008 data=0000000000200009
+  9335.01ns INFO     cocotb.mmq                             [L2] load 2 addr=00000200000 data=4000000000300029
+  9465.01ns INFO     cocotb.mmq                             [L2] load 3 addr=00000300008 data=8000000000400009
+  9585.01ns INFO     cocotb.mmq                             [L2] load 4 addr=00000400010 data=8000000000500009
+  9705.01ns INFO     cocotb.mmq                             [L2] load 5 addr=00000500020 data=8000000000680005
+  9825.01ns INFO     cocotb.mmq                             [L2] load 6 addr=00000680008 data=c000000000a10187
+  9975.01ns INFO     cocotb.regression                  test_m8_64k_page failed
+                                                        Traceback (most recent call last):
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 456, in test_m8_64k_page
+                                                            walked = await tb.miss_walk_hit("derat", ea_64k(1, 0), TARGET_64K + 1 * 0x10000, "M8/sub0")
+                                                          File "/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb/test_tlbmiss.py", line 357, in miss_walk_hit
+                                                            assert self.seen("tlb_write", c0), f"{label}: EVENT 2 ERAT reloaded but no TLB way written"
+                                                        AssertionError: M8/sub0: EVENT 2 ERAT reloaded but no TLB way written
+                                                        assert []
+                                                         +  where [] = seen('tlb_write', 44)
+                                                         +    where seen = <test_tlbmiss.Tb object at 0x751f051fd6c0>.seen
+  9975.01ns INFO     cocotb.regression                  running test_n1_speculative_miss (8/10)
+                                                          N1: a speculative (nonspec=0) miss must not leave the core.
+ 10410.01ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+ 15420.01ns INFO     cocotb.mmq                           N1: speculative miss -> no walk, no load, no exception
+ 15420.01ns INFO     cocotb.regression                  test_n1_speculative_miss passed
+ 15420.01ns INFO     cocotb.regression                  running test_n3_invalid_leaf (9/10)
+                                                          N3: leaf V=0 -> pt_fault, nothing installed, the re-lookup walks again.
+ 15855.01ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+ 16085.01ns INFO     cocotb.mmq                             [L2] load 1 addr=00000100008 data=0000000000200009
+ 16205.01ns INFO     cocotb.mmq                             [L2] load 2 addr=00000200000 data=4000000000300029
+ 16335.01ns INFO     cocotb.mmq                             [L2] load 3 addr=00000300008 data=8000000000400009
+ 16455.01ns INFO     cocotb.mmq                             [L2] load 4 addr=00000400010 data=8000000000500009
+ 16575.01ns INFO     cocotb.mmq                             [L2] load 5 addr=00000500018 data=8000000000600009
+ 16695.01ns INFO     cocotb.mmq                             [L2] load 6 addr=00000600068 data=0000000000000000
+ 17495.01ns INFO     cocotb.mmq                           N3: pt_fault raised, TLB not written, re-lookup walked again
+ 17545.01ns INFO     cocotb.mmq                             [L2] load 7 addr=00000300008 data=8000000000400009
+ 17665.01ns INFO     cocotb.mmq                             [L2] load 8 addr=00000400010 data=8000000000500009
+ 17785.01ns INFO     cocotb.mmq                             [L2] load 9 addr=00000500018 data=8000000000600009
+ 17905.01ns INFO     cocotb.mmq                             [L2] load 10 addr=00000600068 data=0000000000000000
+ 17995.01ns INFO     cocotb.regression                  test_n3_invalid_leaf passed
+ 17995.01ns INFO     cocotb.regression                  running test_selftest_watchdog (10/10)
+                                                          Harness self-test: with the L2 silent, EVENT 2 must fail by WATCHDOG, so a
+                                                          hang can never be reported as a pass.
+ 18430.01ns INFO     cocotb.mmq                         PTCR written and read back over slowspr: 0x100000
+ 18630.01ns INFO     cocotb.mmq                           EVENT 1 SELFTEST: TLB miss handed to mmq_rtw (cycle 63)
+ 59680.01ns INFO     cocotb.mmq                           self-test: stalled L2 reported as failure (SELFTEST: unexpected rtw_mchk at cycle 4163
+                                                        assert not [(4163, 2)])
+ 59680.01ns INFO     cocotb.regression                  test_selftest_watchdog passed
+ 59680.01ns INFO     cocotb.regression                  ***********************************************************************************************
+                                                        ** TEST                                   STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **
+                                                        ***********************************************************************************************
+                                                        ** test_tlbmiss.test_m1_derat_cold         FAIL        1425.00           0.29       4955.37  **
+                                                        ** test_tlbmiss.test_m2_ierat_cold         FAIL        1425.00           0.25       5780.69  **
+                                                        ** test_tlbmiss.test_m3_epn_mismatch       FAIL        1425.00           0.24       5992.68  **
+                                                        ** test_tlbmiss.test_m4_pid_mismatch       FAIL        1425.00           0.25       5643.94  **
+                                                        ** test_tlbmiss.test_m5_lpid_mismatch      FAIL        1425.00           0.24       5942.81  **
+                                                        ** test_tlbmiss.test_m6_as_mismatch        FAIL        1425.00           0.25       5676.39  **
+                                                        ** test_tlbmiss.test_m8_64k_page           FAIL        1425.00           0.24       5897.13  **
+                                                        ** test_tlbmiss.test_n1_speculative_miss   PASS        5445.00           0.81       6727.34  **
+                                                        ** test_tlbmiss.test_n3_invalid_leaf       PASS        2575.00           0.38       6694.59  **
+                                                        ** test_tlbmiss.test_selftest_watchdog     PASS       41685.00           5.99       6961.20  **
+                                                        ***********************************************************************************************
+                                                        ** TESTS=10 PASS=3 FAIL=7 SKIP=0                      59680.01           8.98       6648.40  **
+                                                        ***********************************************************************************************
+                                                        
+make[1]: Leaving directory '/home/arx-0/Documents/GitHub/Microwatt_MMU/a2o/rel/src/verilog/sim/cocotb'
